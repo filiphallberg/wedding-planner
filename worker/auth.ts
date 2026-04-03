@@ -1,45 +1,43 @@
-import type { ClerkClient } from '@clerk/backend'
+import type { ClerkClient } from "@clerk/backend";
 
-export type AuthedUser = { userId: string }
+export type AuthedUser = { userId: string };
 
-/** Worker env may use `CLERK_PUBLISHABLE_KEY` (Wrangler/secrets) or `VITE_CLERK_PUBLISHABLE_KEY` from the same `.env` as the SPA. */
 export function resolveClerkPublishableKey(env: {
-  CLERK_PUBLISHABLE_KEY?: string
-  VITE_CLERK_PUBLISHABLE_KEY?: string
+  VITE_CLERK_PUBLISHABLE_KEY?: string;
 }): string {
-  return (env.CLERK_PUBLISHABLE_KEY || env.VITE_CLERK_PUBLISHABLE_KEY || '').trim()
+  return env.VITE_CLERK_PUBLISHABLE_KEY ?? "";
 }
 
 export async function requireUser(
   request: Request,
   clerk: ClerkClient,
-  env: { CLERK_PUBLISHABLE_KEY?: string; VITE_CLERK_PUBLISHABLE_KEY?: string; CLERK_SECRET_KEY: string },
+  env: { VITE_CLERK_PUBLISHABLE_KEY?: string; CLERK_SECRET_KEY: string }
 ): Promise<AuthedUser | Response> {
   const state = await clerk.authenticateRequest(request, {
     publishableKey: resolveClerkPublishableKey(env),
     secretKey: env.CLERK_SECRET_KEY,
-    acceptsToken: 'session_token',
-  })
-  if (state.status !== 'signed-in') {
-    return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+    acceptsToken: "session_token",
+  });
+  if (state.status !== "signed-in") {
+    return new Response(JSON.stringify({ error: "Unauthorized" }), {
       status: 401,
-      headers: { 'Content-Type': 'application/json' },
-    })
+      headers: { "Content-Type": "application/json" },
+    });
   }
-  const auth = state.toAuth()
+  const auth = state.toAuth();
   if (!auth.userId) {
-    return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+    return new Response(JSON.stringify({ error: "Unauthorized" }), {
       status: 401,
-      headers: { 'Content-Type': 'application/json' },
-    })
+      headers: { "Content-Type": "application/json" },
+    });
   }
-  return { userId: auth.userId }
+  return { userId: auth.userId };
 }
 
 export async function clerkUserEmailAddresses(
   clerk: ClerkClient,
-  userId: string,
+  userId: string
 ): Promise<string[]> {
-  const u = await clerk.users.getUser(userId)
-  return u.emailAddresses.map((e) => e.emailAddress)
+  const u = await clerk.users.getUser(userId);
+  return u.emailAddresses.map((e) => e.emailAddress);
 }

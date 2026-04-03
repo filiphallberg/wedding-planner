@@ -9,7 +9,7 @@
   },
   // Non-secrets only. Set `UPSTASH_REDIS_REST_TOKEN` and `CLERK_SECRET_KEY` via `wrangler secret put …` or `.dev.vars` (local).
   "vars": {
-    "UPSTASH_REDIS_REST_URL": "https://flexible-ferret-91692.upstash.io",
-    "CLERK_PUBLISHABLE_KEY": "pk_test_ZGVjZW50LXJpbmd0YWlsLTc5LmNsZXJrLmFjY291bnRzLmRldiQ"
+    "VITE_UPSTASH_REDIS_REST_URL": "https://flexible-ferret-91692.upstash.io",
+    "VITE_CLERK_PUBLISHABLE_KEY": "pk_test_ZGVjZW50LXJpbmd0YWlsLTc5LmNsZXJrLmFjY291bnRzLmRldiQ"
   }
 }

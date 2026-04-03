@@ -4,23 +4,23 @@
 
 Set at build time (e.g. Cloudflare dashboard **Settings → Environment variables** for the Pages/Workers project, or a `.env` file locally).
 
-| Variable | Required | Description |
-|----------|----------|-------------|
+| Variable                     | Required       | Description                                                                                                |
+| ---------------------------- | -------------- | ---------------------------------------------------------------------------------------------------------- |
 | `VITE_CLERK_PUBLISHABLE_KEY` | For cloud sync | Clerk publishable key. If unset, the app runs in **local-only** mode (no sign-in, data in `localStorage`). |
-| `VITE_BASE_PATH` | Optional | Vite `base`, e.g. `/` or `/repo-name/` for GitHub Pages-style hosting. Defaults to `/`. |
+| `VITE_BASE_PATH`             | Optional       | Vite `base`, e.g. `/` or `/repo-name/` for GitHub Pages-style hosting. Defaults to `/`.                    |
 
 ## Worker (Cloudflare secrets / `.dev.vars`)
 
 Never commit real values. For local development, copy `.dev.vars.example` to `.dev.vars` and fill in values.
 
-| Variable | Description |
-|----------|-------------|
-| `UPSTASH_REDIS_REST_URL` | From [Upstash Redis](https://console.upstash.com/) |
-| `UPSTASH_REDIS_REST_TOKEN` | Same |
-| `CLERK_SECRET_KEY` | Clerk **Secret** key (Dashboard → API Keys) |
-| `CLERK_PUBLISHABLE_KEY` | Clerk **Publishable** key (same as `VITE_CLERK_PUBLISHABLE_KEY` value) |
+| Variable                      | Description                                        |
+| ----------------------------- | -------------------------------------------------- |
+| `VITE_UPSTASH_REDIS_REST_URL` | From [Upstash Redis](https://console.upstash.com/) |
+| `UPSTASH_REDIS_REST_TOKEN`    | Same                                               |
+| `CLERK_SECRET_KEY`            | Clerk **Secret** key (Dashboard → API Keys)        |
+| `VITE_CLERK_PUBLISHABLE_KEY`  | Clerk **Publishable** key                          |
 
-The Worker uses `CLERK_PUBLISHABLE_KEY` and `CLERK_SECRET_KEY` with `authenticateRequest` on `/api/*` and `/api/realtime`.
+The Worker uses `VITE_CLERK_PUBLISHABLE_KEY` and `CLERK_SECRET_KEY` with `authenticateRequest` on `/api/*` and `/api/realtime`.
 
 ## Deploy
 
