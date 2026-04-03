@@ -1,0 +1,17 @@
+{
+  "extends": "./tsconfig.node.json",
+  "compilerOptions": {
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.worker.tsbuildinfo",
+    "lib": ["ES2023"],
+    "types": ["@cloudflare/workers-types", "vite/client"],
+    "noEmit": true
+  },
+  "include": [
+    "worker/**/*.ts",
+    "shared/**/*.ts",
+    "src/state/weddingStateCodec.ts",
+    "src/state/types.ts",
+    "src/state/constants.ts",
+    "src/lib/tablePalettes.ts"
+  ]
+}

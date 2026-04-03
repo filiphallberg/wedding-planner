@@ -1,9 +1,14 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { DragEndEvent } from '@dnd-kit/core'
 import { DEFAULT_TABLE_PALETTE_ID, type TablePaletteId } from '../lib/tablePalettes'
+import { useRealtime } from '../realtime/client'
+import { getProjectApi, saveProjectApi } from '../sync/projectApi'
 import { SEATS_PER_TABLE } from './constants'
-import { emptyState, loadState, saveState } from './storage'
+import { loadLocalProjectState, saveLocalProjectState } from './localProjectStorage'
 import type { Guest, SeatAssignment, Table, WeddingState } from './types'
+import { emptyState, parseWeddingState } from './weddingStateCodec'
+
+const SAVE_DEBOUNCE_MS = 450
 
 function newId(): string {
   return crypto.randomUUID()
@@ -13,7 +18,6 @@ export function droppableUnassigned(): string {
   return 'unassigned'
 }
 
-/** Droppable id for a fixed seat slot (0 .. SEATS_PER_TABLE - 1). */
 export function droppableSeat(tableId: string, seatIndex: number): string {
   return `seat:${tableId}:${seatIndex}`
 }
@@ -35,12 +39,120 @@ export function parseSeatDroppable(id: string): { tableId: string; seatIndex: nu
   return { tableId, seatIndex }
 }
 
-export function useWeddingState() {
-  const [state, setState] = useState<WeddingState>(() => loadState() ?? emptyState())
+export type WeddingSyncMode = 'local' | 'cloud'
+
+export function useWeddingState(opts: { projectId: string | null; sync: WeddingSyncMode }) {
+  const { projectId, sync } = opts
+
+  const [state, setState] = useState<WeddingState>(() => emptyState())
+  const [hydrated, setHydrated] = useState(sync === 'local')
+
+  const skipSaveRef = useRef(false)
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const lastSentJsonRef = useRef<string | null>(null)
+
+  const clearSaveTimer = () => {
+    if (saveTimerRef.current) {
+      clearTimeout(saveTimerRef.current)
+      saveTimerRef.current = null
+    }
+  }
 
   useEffect(() => {
-    saveState(state)
-  }, [state])
+    clearSaveTimer()
+    skipSaveRef.current = true
+    setHydrated(false)
+
+    if (!projectId) {
+      setState(emptyState())
+      setHydrated(true)
+      lastSentJsonRef.current = null
+      return
+    }
+
+    if (sync === 'local') {
+      const loaded = loadLocalProjectState(projectId) ?? emptyState()
+      setState(loaded)
+      lastSentJsonRef.current = JSON.stringify(loaded)
+      setHydrated(true)
+      skipSaveRef.current = false
+      return
+    }
+
+    let cancelled = false
+    ;(async () => {
+      try {
+        const { state: remote } = await getProjectApi(projectId)
+        if (cancelled) return
+        setState(remote)
+        lastSentJsonRef.current = JSON.stringify(remote)
+      } catch {
+        if (!cancelled) setState(emptyState())
+      } finally {
+        if (!cancelled) {
+          setHydrated(true)
+          skipSaveRef.current = false
+        }
+      }
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [projectId, sync])
+
+  useEffect(() => {
+    if (sync !== 'local' || !projectId) return
+    saveLocalProjectState(projectId, state)
+  }, [sync, projectId, state])
+
+  const scheduleCloudSave = useCallback(
+    (next: WeddingState) => {
+      if (sync !== 'cloud' || !projectId) return
+      const json = JSON.stringify(next)
+      if (json === lastSentJsonRef.current) return
+      clearSaveTimer()
+      saveTimerRef.current = setTimeout(() => {
+        saveTimerRef.current = null
+        void (async () => {
+          try {
+            await saveProjectApi(projectId, next)
+            lastSentJsonRef.current = json
+          } catch {
+            /* retry on next edit */
+          }
+        })()
+      }, SAVE_DEBOUNCE_MS)
+    },
+    [sync, projectId],
+  )
+
+  useRealtime({
+    channels: projectId && sync === 'cloud' ? [`project:${projectId}`] : [],
+    enabled: Boolean(projectId && sync === 'cloud' && hydrated),
+    onData: (payload) => {
+      if (!String(payload.event).startsWith('seating.updated')) return
+      const data = payload.data as { stateJson: string }
+      const { stateJson } = data
+      const parsed = parseWeddingState(JSON.parse(stateJson))
+      if (!parsed) return
+      const incoming = JSON.stringify(parsed)
+      if (incoming === lastSentJsonRef.current) return
+      skipSaveRef.current = true
+      lastSentJsonRef.current = incoming
+      setState(parsed)
+    },
+  })
+
+  useEffect(() => {
+    if (!hydrated || sync !== 'cloud' || !projectId) return
+    if (skipSaveRef.current) {
+      skipSaveRef.current = false
+      return
+    }
+    scheduleCloudSave(state)
+    return () => clearSaveTimer()
+  }, [state, hydrated, sync, projectId, scheduleCloudSave])
 
   const addGuest = useCallback((name: string, specialNeedsNote = '') => {
     const trimmed = name.trim()
@@ -90,7 +202,6 @@ export function useWeddingState() {
     })
   }, [])
 
-  /** Clear seat assignment only; guest stays in the list (unassigned pool). */
   const unseatGuest = useCallback((guestId: string) => {
     setState((s) => ({
       ...s,
@@ -208,6 +319,7 @@ export function useWeddingState() {
 
   return {
     state,
+    hydrated,
     replaceState,
     addGuest,
     updateGuest,
