@@ -91,7 +91,10 @@ export function useWeddingState(opts: { projectId: string | null; sync: WeddingS
       } finally {
         if (!cancelled) {
           setHydrated(true)
-          skipSaveRef.current = false
+          // Skip the first autosave pass: scheduling a PUT of the loaded snapshot would debounce
+          // and could fire *after* someone else saved, overwriting newer server state (collaborators
+          // then never see the owner's changes). Real saves only run after user edits.
+          skipSaveRef.current = true
         }
       }
     })()
@@ -131,9 +134,9 @@ export function useWeddingState(opts: { projectId: string | null; sync: WeddingS
     channels: projectId && sync === 'cloud' ? [`project:${projectId}`] : [],
     enabled: Boolean(projectId && sync === 'cloud' && hydrated),
     onData: (payload) => {
-      if (!String(payload.event).startsWith('seating.updated')) return
-      const data = payload.data as { stateJson: string }
-      const { stateJson } = data
+      const data = payload.data as { stateJson?: string }
+      const stateJson = data?.stateJson
+      if (typeof stateJson !== 'string') return
       const parsed = parseWeddingState(JSON.parse(stateJson))
       if (!parsed) return
       const incoming = JSON.stringify(parsed)
@@ -153,6 +156,32 @@ export function useWeddingState(opts: { projectId: string | null; sync: WeddingS
     scheduleCloudSave(state)
     return () => clearSaveTimer()
   }, [state, hydrated, sync, projectId, scheduleCloudSave])
+
+  /** If SSE misses an update, refresh when the tab is foregrounded (no local edits pending). */
+  useEffect(() => {
+    if (sync !== 'cloud' || !projectId || !hydrated) return
+    const onVis = () => {
+      if (document.visibilityState !== 'visible') return
+      if (saveTimerRef.current !== null) return
+      void (async () => {
+        try {
+          const { state: remote } = await getProjectApi(projectId)
+          const incoming = JSON.stringify(remote)
+          setState((prev) => {
+            if (JSON.stringify(prev) !== lastSentJsonRef.current) return prev
+            if (incoming === lastSentJsonRef.current) return prev
+            lastSentJsonRef.current = incoming
+            skipSaveRef.current = true
+            return remote
+          })
+        } catch {
+          /* ignore */
+        }
+      })()
+    }
+    document.addEventListener('visibilitychange', onVis)
+    return () => document.removeEventListener('visibilitychange', onVis)
+  }, [sync, projectId, hydrated])
 
   const addGuest = useCallback((name: string, specialNeedsNote = '') => {
     const trimmed = name.trim()

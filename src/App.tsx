@@ -130,9 +130,11 @@ function CloudApp() {
     try {
       const params = new URLSearchParams(window.location.search)
       const inviteToken = params.get('invite')
+      let joinedProjectId: string | null = null
       if (inviteToken) {
         try {
-          await acceptInviteApi(inviteToken)
+          const joined = await acceptInviteApi(inviteToken)
+          joinedProjectId = joined.id
           params.delete('invite')
           const qs = params.toString()
           const nextUrl = `${window.location.pathname}${qs ? `?${qs}` : ''}${window.location.hash}`
@@ -154,7 +156,11 @@ function CloudApp() {
       setProjects(list)
       const stored = readStoredProjectId()
       const pick =
-        stored && list.some((x) => x.id === stored) ? stored : list[0]!.id
+        joinedProjectId && list.some((x) => x.id === joinedProjectId)
+          ? joinedProjectId
+          : stored && list.some((x) => x.id === stored)
+            ? stored
+            : list[0]!.id
       setActiveId(pick)
     } catch {
       setProjects([])
