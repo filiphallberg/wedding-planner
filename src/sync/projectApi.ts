@@ -2,10 +2,13 @@ import { appUrl } from '../lib/appUrl'
 import type { WeddingState } from '../state/types'
 import type { WeddingRemoteAdapter } from './adapterTypes'
 
+export type ProjectRole = 'owner' | 'member'
+
 export type ProjectMeta = {
   id: string
   name: string
   updatedAt: string
+  role?: ProjectRole
 }
 
 async function parseJson<T>(res: Response): Promise<T> {
@@ -45,13 +48,45 @@ export async function getProjectApi(projectId: string): Promise<{
   name: string
   updatedAt: string
   state: WeddingState
+  role?: ProjectRole
 }> {
   const res = await fetch(appUrl(`/api/projects/${projectId}`), {
     credentials: 'include',
   })
   const data = await parseJson<{
-    project: { id: string; name: string; updatedAt: string; state: WeddingState }
+    project: {
+      id: string
+      name: string
+      updatedAt: string
+      state: WeddingState
+      role?: ProjectRole
+    }
   }>(res)
+  return data.project
+}
+
+export async function createProjectInviteApi(
+  projectId: string,
+  email: string,
+): Promise<{ token: string; expiresInSeconds: number }> {
+  const res = await fetch(appUrl(`/api/projects/${projectId}/invites`), {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email }),
+  })
+  const data = await parseJson<{ invite: { token: string; expiresInSeconds: number } }>(res)
+  return data.invite
+}
+
+export async function acceptInviteApi(token: string): Promise<ProjectMeta> {
+  const res = await fetch(appUrl('/api/invites/accept'), {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token }),
+  })
+  const data = await parseJson<{ project: ProjectMeta }>(res)
   return data.project
 }
 

@@ -2,12 +2,16 @@ import { Redis } from '@upstash/redis'
 import { Realtime, handle } from '@upstash/realtime'
 import { createClerkClient } from '@clerk/backend'
 import { seatingRealtimeSchema } from '../shared/realtimeSchema'
-import { requireUser } from './auth'
+import { clerkUserEmailAddresses, requireUser, resolveClerkPublishableKey } from './auth'
 import {
+  acceptProjectInvite,
+  canAccessProject,
   createProject,
+  createProjectInvite,
   getProject,
+  isOwner,
   listProjects,
-  ownsProject,
+  PROJECT_INVITE_TTL_SECONDS,
   renameProject,
   saveProjectState,
 } from './projects'
@@ -18,7 +22,10 @@ export interface Env {
   UPSTASH_REDIS_REST_URL: string
   UPSTASH_REDIS_REST_TOKEN: string
   CLERK_SECRET_KEY: string
-  CLERK_PUBLISHABLE_KEY: string
+  /** Prefer this in production (Wrangler vars / dashboard). */
+  CLERK_PUBLISHABLE_KEY?: string
+  /** Same key as the Vite client; loaded from `.env` in local dev when `CLERK_PUBLISHABLE_KEY` is unset. */
+  VITE_CLERK_PUBLISHABLE_KEY?: string
 }
 
 function redisClient(env: Env): Redis {
@@ -31,7 +38,7 @@ function redisClient(env: Env): Redis {
 function clerkClient(env: Env) {
   return createClerkClient({
     secretKey: env.CLERK_SECRET_KEY,
-    publishableKey: env.CLERK_PUBLISHABLE_KEY,
+    publishableKey: resolveClerkPublishableKey(env),
   })
 }
 
@@ -59,7 +66,7 @@ async function handleRealtime(request: Request, env: Env): Promise<Response> {
           })
         }
         const projectId = ch.slice('project:'.length)
-        const ok = await ownsProject(redis, user.userId, projectId)
+        const ok = await canAccessProject(redis, user.userId, projectId)
         if (!ok) {
           return new Response(JSON.stringify({ error: 'Forbidden' }), {
             status: 403,
@@ -115,6 +122,45 @@ export default {
       return json({ project: meta })
     }
 
+    if (path === '/api/invites/accept' && request.method === 'POST') {
+      let body: { token?: string } = {}
+      try {
+        body = (await request.json()) as { token?: string }
+      } catch {
+        return json({ error: 'Invalid JSON' }, 400)
+      }
+      const token = typeof body.token === 'string' ? body.token.trim() : ''
+      if (!token) return json({ error: 'token required' }, 400)
+      const emails = await clerkUserEmailAddresses(clerk, user.userId)
+      const meta = await acceptProjectInvite(redis, user.userId, token, emails)
+      if (!meta) {
+        return json(
+          { error: 'Invalid or expired invite, or your account email does not match the invitation' },
+          400,
+        )
+      }
+      return json({ project: meta })
+    }
+
+    const inviteMatch = /^\/api\/projects\/([^/]+)\/invites$/.exec(path)
+    if (inviteMatch && request.method === 'POST') {
+      const projectId = inviteMatch[1]!
+      let body: { email?: string } = {}
+      try {
+        body = (await request.json()) as { email?: string }
+      } catch {
+        body = {}
+      }
+      const email = typeof body.email === 'string' ? body.email : ''
+      const created = await createProjectInvite(redis, user.userId, projectId, email)
+      if (!created) {
+        return json({ error: 'Only the owner can invite, or the email is invalid' }, 400)
+      }
+      return json({
+        invite: { token: created.token, expiresInSeconds: PROJECT_INVITE_TTL_SECONDS },
+      })
+    }
+
     const projectMatch = /^\/api\/projects\/([^/]+)$/.exec(path)
     if (projectMatch) {
       const projectId = projectMatch[1]!
@@ -122,12 +168,14 @@ export default {
       if (request.method === 'GET') {
         const rec = await getProject(redis, user.userId, projectId)
         if (!rec) return json({ error: 'Not found' }, 404)
+        const role = (await isOwner(redis, user.userId, projectId)) ? 'owner' : 'member'
         return json({
           project: {
             id: projectId,
             name: rec.name,
             updatedAt: rec.updatedAt,
             state: rec.state,
+            role,
           },
         })
       }

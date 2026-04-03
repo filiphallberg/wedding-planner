@@ -12,11 +12,13 @@ import {
 import { weddingCollisionDetection } from './collisionDetection'
 import { GuestChipBody } from './components/GuestChip'
 import { GuestEditModal } from './components/GuestEditModal'
+import { InviteCollaboratorsDialog } from './components/InviteCollaboratorsDialog'
 import { TableCard } from './components/TableCard'
 import { UnassignedPool } from './components/UnassignedPool'
 import { downloadConfigJson } from './export/configJson'
 import { compareStringsNatural } from './lib/compareStringsNatural'
 import {
+  acceptInviteApi,
   createProjectApi,
   listProjectsApi,
   renameProjectApi,
@@ -121,10 +123,29 @@ function CloudApp() {
   const [projects, setProjects] = useState<ProjectMeta[]>([])
   const [activeId, setActiveId] = useState<string | null>(null)
   const [projectsLoading, setProjectsLoading] = useState(true)
+  const [inviteOpen, setInviteOpen] = useState(false)
 
   const bootstrap = useCallback(async () => {
     setProjectsLoading(true)
     try {
+      const params = new URLSearchParams(window.location.search)
+      const inviteToken = params.get('invite')
+      if (inviteToken) {
+        try {
+          await acceptInviteApi(inviteToken)
+          params.delete('invite')
+          const qs = params.toString()
+          const nextUrl = `${window.location.pathname}${qs ? `?${qs}` : ''}${window.location.hash}`
+          window.history.replaceState({}, '', nextUrl)
+        } catch (e) {
+          window.alert(e instanceof Error ? e.message : 'Could not accept invitation')
+          params.delete('invite')
+          const qs = params.toString()
+          const nextUrl = `${window.location.pathname}${qs ? `?${qs}` : ''}${window.location.hash}`
+          window.history.replaceState({}, '', nextUrl)
+        }
+      }
+
       let list = await listProjectsApi()
       if (list.length === 0) {
         const p = await createProjectApi('Main')
@@ -203,7 +224,9 @@ function CloudApp() {
     }
   }
 
-  if (!isLoaded || projectsLoading) {
+  // Only wait on projects when signed in; bootstrap never runs when signed out, so
+  // projectsLoading would stay true forever for guests.
+  if (!isLoaded || (isSignedIn && projectsLoading)) {
     return (
       <div className="flex min-h-svh items-center justify-center text-stone-600">Loading…</div>
     )
@@ -217,17 +240,29 @@ function CloudApp() {
     )
   }
 
+  const activeRole = projects.find((p) => p.id === activeId)?.role
+  const canRenameProject = activeRole !== 'member'
+
   return (
-    <SeatingLayout
-      projectId={activeId}
-      projects={projects}
-      onSelectProject={setActiveId}
-      onNewProject={() => void onNewProject()}
-      onRenameProject={() => void onRename()}
-      onImportLocal={importLocal}
-      userSlot={<UserButton afterSignOutUrl={window.location.href} />}
-      wedding={wedding}
-    />
+    <>
+      <SeatingLayout
+        projectId={activeId}
+        projects={projects}
+        onSelectProject={setActiveId}
+        onNewProject={() => void onNewProject()}
+        onRenameProject={() => void onRename()}
+        onImportLocal={importLocal}
+        canRenameProject={canRenameProject}
+        onOpenInvite={activeRole === 'member' ? undefined : () => setInviteOpen(true)}
+        userSlot={<UserButton afterSignOutUrl={window.location.href} />}
+        wedding={wedding}
+      />
+      <InviteCollaboratorsDialog
+        projectId={activeId ?? ''}
+        open={inviteOpen && Boolean(activeId)}
+        onClose={() => setInviteOpen(false)}
+      />
+    </>
   )
 }
 
@@ -240,6 +275,8 @@ function SeatingLayout({
   onNewProject,
   onRenameProject,
   onImportLocal,
+  canRenameProject = true,
+  onOpenInvite,
   userSlot,
   wedding,
 }: {
@@ -249,6 +286,8 @@ function SeatingLayout({
   onNewProject: () => void
   onRenameProject: () => void
   onImportLocal?: () => void
+  canRenameProject?: boolean
+  onOpenInvite?: () => void
   userSlot: ReactNode
   wedding: LayoutWedding
 }) {
@@ -344,6 +383,7 @@ function SeatingLayout({
                     {projects.map((p) => (
                       <option key={p.id} value={p.id}>
                         {p.name}
+                        {p.role === 'member' ? ' (shared)' : ''}
                       </option>
                     ))}
                   </select>
@@ -354,13 +394,24 @@ function SeatingLayout({
                   >
                     New project
                   </button>
-                  <button
-                    type="button"
-                    onClick={onRenameProject}
-                    className="rounded-md border border-stone-300 bg-white px-2.5 py-1 text-xs text-stone-600 hover:bg-stone-50"
-                  >
-                    Rename
-                  </button>
+                  {canRenameProject ? (
+                    <button
+                      type="button"
+                      onClick={onRenameProject}
+                      className="rounded-md border border-stone-300 bg-white px-2.5 py-1 text-xs text-stone-600 hover:bg-stone-50"
+                    >
+                      Rename
+                    </button>
+                  ) : null}
+                  {onOpenInvite ? (
+                    <button
+                      type="button"
+                      onClick={onOpenInvite}
+                      className="rounded-md border border-stone-300 bg-white px-2.5 py-1 text-xs text-stone-600 hover:bg-stone-50"
+                    >
+                      Invite
+                    </button>
+                  ) : null}
                   {onImportLocal ? (
                     <button
                       type="button"
