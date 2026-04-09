@@ -1,5 +1,5 @@
 import { useAuth, SignIn, UserButton } from '@clerk/clerk-react'
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import {
   DndContext,
   DragOverlay,
@@ -10,22 +10,21 @@ import {
   type DragStartEvent,
 } from '@dnd-kit/core'
 import { weddingCollisionDetection } from './collisionDetection'
+import { AddGuestDialog } from './components/AddGuestDialog'
+import { AddTableDialog } from './components/AddTableDialog'
 import { GuestChipBody } from './components/GuestChip'
 import { GuestEditModal } from './components/GuestEditModal'
 import { InviteCollaboratorsDialog } from './components/InviteCollaboratorsDialog'
 import { TableCard } from './components/TableCard'
 import { UnassignedPool } from './components/UnassignedPool'
-import { downloadConfigJson } from './export/configJson'
 import { compareStringsNatural } from './lib/compareStringsNatural'
 import {
   acceptInviteApi,
   createProjectApi,
   listProjectsApi,
   renameProjectApi,
-  saveProjectApi,
   type ProjectMeta,
 } from './sync/projectApi'
-import { parseWeddingState } from './state/storage'
 import type { Guest } from './state/types'
 import { useWeddingState } from './state/useWeddingState'
 import {
@@ -209,27 +208,6 @@ function CloudApp() {
     }
   }
 
-  const importLocal = async () => {
-    try {
-      const raw = localStorage.getItem('wedding-seating-state')
-      if (!raw) {
-        window.alert('No legacy local data found (wedding-seating-state).')
-        return
-      }
-      const parsed = parseWeddingState(JSON.parse(raw))
-      if (!parsed) {
-        window.alert('Invalid local data.')
-        return
-      }
-      const p = await createProjectApi('Imported from browser')
-      await saveProjectApi(p.id, parsed)
-      await bootstrap()
-      setActiveId(p.id)
-    } catch (e) {
-      window.alert(e instanceof Error ? e.message : 'Import failed')
-    }
-  }
-
   // Only wait on projects when signed in; bootstrap never runs when signed out, so
   // projectsLoading would stay true forever for guests.
   if (!isLoaded || (isSignedIn && projectsLoading)) {
@@ -257,7 +235,6 @@ function CloudApp() {
         onSelectProject={setActiveId}
         onNewProject={() => void onNewProject()}
         onRenameProject={() => void onRename()}
-        onImportLocal={importLocal}
         canRenameProject={canRenameProject}
         onOpenInvite={activeRole === 'member' ? undefined : () => setInviteOpen(true)}
         userSlot={<UserButton afterSignOutUrl={window.location.href} />}
@@ -280,7 +257,6 @@ function SeatingLayout({
   onSelectProject,
   onNewProject,
   onRenameProject,
-  onImportLocal,
   canRenameProject = true,
   onOpenInvite,
   userSlot,
@@ -291,7 +267,6 @@ function SeatingLayout({
   onSelectProject: (id: string) => void
   onNewProject: () => void
   onRenameProject: () => void
-  onImportLocal?: () => void
   canRenameProject?: boolean
   onOpenInvite?: () => void
   userSlot: ReactNode
@@ -304,21 +279,18 @@ function SeatingLayout({
     unseatGuest,
     addTable,
     setTablePalette,
+    updateTable,
     removeTable,
     handleDragEnd,
     unassignedGuests,
     seatsForTable,
     tableOccupancy,
     state,
-    replaceState,
     hydrated,
   } = wedding
 
-  const importFileRef = useRef<HTMLInputElement>(null)
-
-  const [guestName, setGuestName] = useState('')
-  const [newGuestNeedsNote, setNewGuestNeedsNote] = useState('')
-  const [tableLabel, setTableLabel] = useState('')
+  const [addGuestOpen, setAddGuestOpen] = useState(false)
+  const [addTableOpen, setAddTableOpen] = useState(false)
   const [editingGuest, setEditingGuest] = useState<Guest | null>(null)
   const [activeDragGuest, setActiveDragGuest] = useState<{
     guest: Guest
@@ -371,8 +343,8 @@ function SeatingLayout({
       onDragCancel={onDragCancel}
     >
       <div className="flex min-h-svh w-full max-w-full flex-col">
-        <header className="shrink-0 border-b border-stone-200 px-4 py-8 sm:px-6 lg:px-8">
-          <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+        <header className="shrink-0 border-b border-stone-200 px-4 py-6 sm:px-6 lg:px-8">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
                 <h1 className="text-xl font-medium tracking-tight text-stone-900">Seating</h1>
@@ -418,17 +390,7 @@ function SeatingLayout({
                       Invite
                     </button>
                   ) : null}
-                  {onImportLocal ? (
-                    <button
-                      type="button"
-                      onClick={onImportLocal}
-                      className="rounded-md border border-stone-300 bg-white px-2.5 py-1 text-xs text-stone-600 hover:bg-stone-50"
-                    >
-                      Import legacy local
-                    </button>
-                  ) : null}
                 </div>
-                {userSlot}
                 <button
                   type="button"
                   onClick={async () => {
@@ -441,123 +403,32 @@ function SeatingLayout({
                 </button>
                 <button
                   type="button"
-                  onClick={() => downloadConfigJson(state)}
+                  onClick={() => setAddGuestOpen(true)}
                   className="rounded-md border border-stone-300 bg-white px-2.5 py-1 text-xs text-stone-600 hover:bg-stone-50"
-                >
-                  Export JSON
-                </button>
-                <input
-                  ref={importFileRef}
-                  id="import-wedding-config"
-                  type="file"
-                  accept="application/json,.json"
-                  className="sr-only"
-                  tabIndex={-1}
-                  onChange={(e) => {
-                    const file = e.target.files?.[0]
-                    if (!file) return
-                    const reader = new FileReader()
-                    reader.onload = () => {
-                      try {
-                        const text = reader.result as string
-                        const parsed: unknown = JSON.parse(text)
-                        const next = parseWeddingState(parsed)
-                        if (!next) {
-                          window.alert(
-                            'Invalid config file. Use a JSON export from this app, or a compatible v1–v3 backup.',
-                          )
-                          return
-                        }
-                        replaceState(next)
-                      } catch {
-                        window.alert('Could not parse JSON.')
-                      } finally {
-                        e.target.value = ''
-                      }
-                    }
-                    reader.onerror = () => {
-                      window.alert('Could not read the file.')
-                      e.target.value = ''
-                    }
-                    reader.readAsText(file)
-                  }}
-                />
-                <button
-                  type="button"
-                  onClick={() => importFileRef.current?.click()}
-                  className="rounded-md border border-stone-300 bg-white px-2.5 py-1 text-xs text-stone-600 hover:bg-stone-50"
-                  aria-label="Import configuration from a JSON file"
-                >
-                  Import JSON
-                </button>
-              </div>
-              <p className="mt-1 max-w-3xl text-sm text-stone-500">
-                Each table has nine seats around the oval. Drag into a seat to place someone, or onto
-                another guest to swap. Drag back to the unassigned lane on the left to unseat, or use
-                × on a seated guest. × in the unassigned list removes the guest entirely.
-              </p>
-            </div>
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
-              <form
-                className="flex flex-col gap-2 sm:flex-row sm:items-end"
-                onSubmit={(e) => {
-                  e.preventDefault()
-                  addGuest(guestName, newGuestNeedsNote)
-                  setGuestName('')
-                  setNewGuestNeedsNote('')
-                }}
-              >
-                <div className="flex flex-col gap-2">
-                  <input
-                    type="text"
-                    value={guestName}
-                    onChange={(e) => setGuestName(e.target.value)}
-                    placeholder="Guest name"
-                    className="min-w-[10rem] rounded-md border border-stone-200 bg-white px-2.5 py-1.5 text-sm text-stone-800 placeholder:text-stone-400 focus:border-stone-400 focus:outline-none focus:ring-1 focus:ring-stone-400"
-                  />
-                  <textarea
-                    value={newGuestNeedsNote}
-                    onChange={(e) => setNewGuestNeedsNote(e.target.value)}
-                    placeholder="Dietary / special needs (optional)"
-                    rows={2}
-                    className="min-w-[12rem] resize-y rounded-md border border-stone-200 bg-white px-2.5 py-1.5 text-xs text-stone-800 placeholder:text-stone-400 focus:border-stone-400 focus:outline-none focus:ring-1 focus:ring-stone-400"
-                  />
-                </div>
-                <button
-                  type="submit"
-                  className="rounded-md border border-stone-300 bg-white px-3 py-1.5 text-sm text-stone-700 hover:bg-stone-50"
                 >
                   Add guest
                 </button>
-              </form>
-              <form
-                className="flex gap-2"
-                onSubmit={(e) => {
-                  e.preventDefault()
-                  addTable(tableLabel)
-                  setTableLabel('')
-                }}
-              >
-                <input
-                  type="text"
-                  value={tableLabel}
-                  onChange={(e) => setTableLabel(e.target.value)}
-                  placeholder="Table name"
-                  className="min-w-[10rem] rounded-md border border-stone-200 bg-white px-2.5 py-1.5 text-sm text-stone-800 placeholder:text-stone-400 focus:border-stone-400 focus:outline-none focus:ring-1 focus:ring-stone-400"
-                />
                 <button
-                  type="submit"
-                  className="rounded-md border border-stone-300 bg-white px-3 py-1.5 text-sm text-stone-700 hover:bg-stone-50"
+                  type="button"
+                  onClick={() => setAddTableOpen(true)}
+                  className="rounded-md border border-stone-300 bg-white px-2.5 py-1 text-xs text-stone-600 hover:bg-stone-50"
                 >
                   Add table
                 </button>
-              </form>
+              </div>
+              <p className="mt-1 max-w-3xl text-sm text-stone-500">
+                Each table can have its own seat count and shape; seats are spaced evenly around the
+                outline. Drag into a seat to place someone, or onto another guest to swap. Drag back to
+                the unassigned lane on the left to unseat, or use × on a seated guest. × in the
+                unassigned list removes the guest entirely.
+              </p>
             </div>
+            <div className="flex shrink-0 items-center justify-start lg:justify-end">{userSlot}</div>
           </div>
         </header>
 
         <div className="flex min-h-0 flex-1 flex-col sm:flex-row">
-          <aside className="flex min-h-0 w-full shrink-0 flex-col border-b border-stone-200 bg-stone-50/70 px-4 py-6 sm:w-80 sm:max-w-[20rem] sm:border-b-0 sm:border-r sm:px-5 lg:px-6">
+          <aside className="sticky top-0 z-10 flex min-h-0 max-h-svh w-full shrink-0 flex-col overflow-hidden border-b border-stone-200 bg-stone-50/70 px-4 py-6 sm:self-start sm:w-80 sm:max-w-[20rem] sm:border-b-0 sm:border-r sm:px-5 lg:px-6">
             <UnassignedPool
               guests={unassignedGuests}
               onRemoveGuest={removeGuest}
@@ -580,7 +451,10 @@ function SeatingLayout({
                       tableId={t.id}
                       label={t.label}
                       paletteId={t.paletteId}
+                      seatCount={t.seatCount}
+                      shape={t.shape}
                       onPaletteChange={(paletteId) => setTablePalette(t.id, paletteId)}
+                      onTableLayoutChange={(patch) => updateTable(t.id, patch)}
                       seats={seatsForTable(t.id)}
                       occupancy={tableOccupancy(t.id)}
                       onUnseatGuest={unseatGuest}
@@ -606,6 +480,17 @@ function SeatingLayout({
           />
         ) : null}
       </DragOverlay>
+
+      <AddGuestDialog
+        open={addGuestOpen}
+        onClose={() => setAddGuestOpen(false)}
+        onAdd={(name, note) => addGuest(name, note)}
+      />
+      <AddTableDialog
+        open={addTableOpen}
+        onClose={() => setAddTableOpen(false)}
+        onAdd={(label, opts) => addTable(label, opts)}
+      />
 
       {editingGuest && (
         <GuestEditModal

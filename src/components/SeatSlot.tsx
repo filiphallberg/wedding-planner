@@ -1,14 +1,16 @@
 import { useDroppable } from '@dnd-kit/core'
 import { GuestChip } from './GuestChip'
+import { seatPositionForShape } from '../lib/seatPositions'
 import { droppableSeat } from '../state/useWeddingState'
-import { seatPositionOnEllipse } from '../lib/seatPositions'
-import { SEATS_PER_TABLE } from '../state/constants'
+import type { TableShape } from '../state/tableShape'
 import type { Guest } from '../state/types'
 
 type Props = {
   tableId: string
   seatIndex: number
   guest: Guest | null
+  shape: TableShape
+  seatCount: number
   onUnseatGuest: (id: string) => void
   onEditGuest: (guest: Guest) => void
 }
@@ -17,12 +19,14 @@ export function SeatSlot({
   tableId,
   seatIndex,
   guest,
+  shape,
+  seatCount,
   onUnseatGuest,
   onEditGuest,
 }: Props) {
   const id = droppableSeat(tableId, seatIndex)
   const { setNodeRef, isOver } = useDroppable({ id })
-  const pos = seatPositionOnEllipse(seatIndex, SEATS_PER_TABLE)
+  const pos = seatPositionForShape(seatIndex, seatCount, shape)
 
   return (
     <div

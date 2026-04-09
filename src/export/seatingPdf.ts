@@ -1,13 +1,17 @@
 import { jsPDF } from 'jspdf'
 import { compareStringsNatural } from '../lib/compareStringsNatural'
-import { SEATS_PER_TABLE } from '../state/constants'
 import type { Guest, WeddingState } from '../state/types'
 
-function getSeatsForTable(state: WeddingState, tableId: string): (Guest | null)[] {
-  const slots: (Guest | null)[] = Array(SEATS_PER_TABLE).fill(null)
+function getSeatsForTable(state: WeddingState, tableId: string, seatCount: number): (Guest | null)[] {
+  const slots: (Guest | null)[] = Array.from({ length: seatCount }, () => null)
   for (const g of state.guests) {
     const a = state.assignments[g.id]
-    if (a && a.tableId === tableId) {
+    if (
+      a &&
+      a.tableId === tableId &&
+      a.seatIndex >= 0 &&
+      a.seatIndex < seatCount
+    ) {
       slots[a.seatIndex] = g
     }
   }
@@ -75,10 +79,10 @@ export function downloadSeatingPdf(state: WeddingState): void {
   } else {
     for (const table of tablesSorted) {
       writeLines([table.label], 12, 'bold')
-      const seats = getSeatsForTable(state, table.id)
+      const seats = getSeatsForTable(state, table.id, table.seatCount)
       const occupied = seats.filter(Boolean).length
-      writeBlock(`${occupied}/${SEATS_PER_TABLE} seats`, 9)
-      for (let i = 0; i < SEATS_PER_TABLE; i++) {
+      writeBlock(`${occupied}/${table.seatCount} seats`, 9)
+      for (let i = 0; i < table.seatCount; i++) {
         const g = seats[i]
         if (!g) {
           writeBlock(`Seat ${i + 1}: —`, 10)

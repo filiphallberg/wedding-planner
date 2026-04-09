@@ -1,3 +1,5 @@
+import type { TableShape } from '../state/tableShape'
+
 /**
  * Table accent palettes using Tailwind theme colors. Class names are written in full
  * so the build can statically detect them (dynamic `bg-${name}-100` would be purged).
@@ -202,4 +204,20 @@ export function isTablePaletteId(value: string): value is TablePaletteId {
 
 export function getTablePalette(id: TablePaletteId) {
   return TABLE_PALETTES[id]
+}
+
+/** Aspect and border radii for the table surface inside the card. */
+export function getTableShapeShell(
+  shape: TableShape,
+  palette: (typeof TABLE_PALETTES)[TablePaletteId],
+): { aspect: string; outer: string; inner: string } {
+  const outerRound =
+    shape === 'oval' ? 'rounded-[50%]' : shape === 'round' ? 'rounded-full' : 'rounded-2xl'
+  const innerRound =
+    shape === 'oval' ? 'rounded-[50%]' : shape === 'round' ? 'rounded-full' : 'rounded-xl'
+  return {
+    aspect: shape === 'round' || shape === 'square' ? 'aspect-square' : 'aspect-[7/5]',
+    outer: palette.ovalOuter.replaceAll('rounded-[50%]', outerRound),
+    inner: palette.ovalInner.replaceAll('rounded-[50%]', innerRound),
+  }
 }

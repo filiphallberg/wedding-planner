@@ -1,3 +1,8 @@
+import type { TablePaletteId } from '../lib/tablePalettes'
+import type { TableShape } from './tableShape'
+
+export type { TableShape } from './tableShape'
+
 export type Guest = {
   id: string
   name: string
@@ -5,18 +10,20 @@ export type Guest = {
   specialNeedsNote: string
 }
 
-import type { TablePaletteId } from '../lib/tablePalettes'
-
 export type Table = {
   id: string
   label: string
   /** Accent colors for this card (Tailwind palette name). */
   paletteId: TablePaletteId
+  /** Number of seats around the table (evenly spaced). */
+  seatCount: number
+  /** Visual outline of the table surface. */
+  shape: TableShape
 }
 
 export type SeatAssignment = {
   tableId: string
-  /** 0 .. SEATS_PER_TABLE - 1 */
+  /** 0 .. table.seatCount - 1 for that table */
   seatIndex: number
 }
 

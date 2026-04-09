@@ -1,5 +1,10 @@
 import { DEFAULT_TABLE_PALETTE_ID, isTablePaletteId } from '../lib/tablePalettes'
-import { SEATS_PER_TABLE } from './constants'
+import {
+  DEFAULT_SEAT_COUNT,
+  MAX_SEATS_PER_TABLE,
+  MIN_SEATS_PER_TABLE,
+} from './constants'
+import { isTableShape } from './tableShape'
 import type { Guest, SeatAssignment, Table, WeddingState } from './types'
 
 function normalizeGuest(raw: {
@@ -45,7 +50,7 @@ function migrateV2ToV3(
       return na.localeCompare(nb)
     })
     sorted.forEach((gid, i) => {
-      if (i < SEATS_PER_TABLE) {
+      if (i < DEFAULT_SEAT_COUNT) {
         next[gid] = { tableId: tid, seatIndex: i }
       } else {
         next[gid] = null
@@ -59,7 +64,9 @@ function migrateV2ToV3(
 function normalizeV3Assignments(
   raw: Record<string, unknown>,
   guests: Guest[],
+  tables: Table[],
 ): Record<string, SeatAssignment | null> {
+  const capByTable = new Map(tables.map((t) => [t.id, t.seatCount]))
   const out: Record<string, SeatAssignment | null> = {}
   for (const g of guests) {
     const v = raw[g.id]
@@ -72,11 +79,13 @@ function normalizeV3Assignments(
       continue
     }
     const o = v as { tableId?: string; seatIndex?: number }
+    const cap = typeof o.tableId === 'string' ? capByTable.get(o.tableId) : undefined
     if (
       typeof o.tableId === 'string' &&
       typeof o.seatIndex === 'number' &&
       o.seatIndex >= 0 &&
-      o.seatIndex < SEATS_PER_TABLE
+      cap !== undefined &&
+      o.seatIndex < cap
     ) {
       out[g.id] = { tableId: o.tableId, seatIndex: o.seatIndex }
     } else {
@@ -117,18 +126,34 @@ function parseTablesArray(raw: unknown): Table[] | null {
       typeof paletteRaw === 'string' && isTablePaletteId(paletteRaw)
         ? paletteRaw
         : DEFAULT_TABLE_PALETTE_ID
-    out.push({ id: t.id, label: t.label, paletteId })
+    const sc = t.seatCount
+    const seatCount =
+      typeof sc === 'number' &&
+      Number.isInteger(sc) &&
+      sc >= MIN_SEATS_PER_TABLE &&
+      sc <= MAX_SEATS_PER_TABLE
+        ? sc
+        : DEFAULT_SEAT_COUNT
+    const shape = isTableShape(t.shape) ? t.shape : 'oval'
+    out.push({ id: t.id, label: t.label, paletteId, seatCount, shape })
   }
   return out
 }
 
-/** Clear seat assignments that reference unknown table ids. */
+/** Clear seat assignments that reference unknown tables or out-of-range seats. */
 function sanitizeState(state: WeddingState): WeddingState {
   const tableIds = new Set(state.tables.map((t) => t.id))
+  const capByTable = new Map(state.tables.map((t) => [t.id, t.seatCount]))
   const assignments = { ...state.assignments }
   for (const g of state.guests) {
     const a = assignments[g.id]
-    if (a && !tableIds.has(a.tableId)) {
+    if (!a) continue
+    if (!tableIds.has(a.tableId)) {
+      assignments[g.id] = null
+      continue
+    }
+    const cap = capByTable.get(a.tableId) ?? 0
+    if (a.seatIndex < 0 || a.seatIndex >= cap) {
       assignments[g.id] = null
     }
   }
@@ -155,6 +180,7 @@ export function parseWeddingState(parsed: unknown): WeddingState | null {
       const assignments = normalizeV3Assignments(
         o.assignments as Record<string, unknown>,
         guests,
+        tables,
       )
       return sanitizeState({ version: 3, guests, tables, assignments })
     }

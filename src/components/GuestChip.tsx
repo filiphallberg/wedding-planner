@@ -118,12 +118,13 @@ export function GuestChip({
     data: { compact },
   })
 
-  const style = transform
-    ? {
-      transform: CSS.Translate.toString(transform),
-      opacity: isDragging ? 0 : undefined,
-    }
-    : undefined
+  // With DragOverlay, do not translate the source while dragging — transform still
+  // affects scroll overflow on ancestors (overflow-auto / sticky) even at opacity 0.
+  const style = isDragging
+    ? { opacity: 0 }
+    : transform
+      ? { transform: CSS.Translate.toString(transform) }
+      : undefined
 
   return (
     <div

@@ -3,8 +3,9 @@ import type { DragEndEvent } from '@dnd-kit/core'
 import { DEFAULT_TABLE_PALETTE_ID, type TablePaletteId } from '../lib/tablePalettes'
 import { useRealtime } from '../realtime/client'
 import { getProjectApi, saveProjectApi } from '../sync/projectApi'
-import { SEATS_PER_TABLE } from './constants'
+import { DEFAULT_SEAT_COUNT, MAX_SEATS_PER_TABLE } from './constants'
 import { loadLocalProjectState, saveLocalProjectState } from './localProjectStorage'
+import type { TableShape } from './tableShape'
 import type { Guest, SeatAssignment, Table, WeddingState } from './types'
 import { emptyState, parseWeddingState } from './weddingStateCodec'
 
@@ -29,11 +30,7 @@ export function parseSeatDroppable(id: string): { tableId: string; seatIndex: nu
   if (lastColon === -1) return null
   const tableId = rest.slice(0, lastColon)
   const seatIndex = Number.parseInt(rest.slice(lastColon + 1), 10)
-  if (
-    !Number.isFinite(seatIndex) ||
-    seatIndex < 0 ||
-    seatIndex >= SEATS_PER_TABLE
-  ) {
+  if (!Number.isFinite(seatIndex) || seatIndex < 0 || seatIndex >= MAX_SEATS_PER_TABLE) {
     return null
   }
   return { tableId, seatIndex }
@@ -238,19 +235,31 @@ export function useWeddingState(opts: { projectId: string | null; sync: WeddingS
     }))
   }, [])
 
-  const addTable = useCallback((label: string) => {
-    const trimmed = label.trim()
-    if (!trimmed) return
-    const table: Table = {
-      id: newId(),
-      label: trimmed,
-      paletteId: DEFAULT_TABLE_PALETTE_ID,
-    }
-    setState((s) => ({
-      ...s,
-      tables: [...s.tables, table],
-    }))
-  }, [])
+  const addTable = useCallback(
+    (
+      label: string,
+      opts?: { seatCount?: number; shape?: TableShape },
+    ) => {
+      const trimmed = label.trim()
+      if (!trimmed) return
+      let seatCount = opts?.seatCount ?? DEFAULT_SEAT_COUNT
+      seatCount = Math.round(seatCount)
+      if (seatCount < 1) seatCount = 1
+      if (seatCount > MAX_SEATS_PER_TABLE) seatCount = MAX_SEATS_PER_TABLE
+      const table: Table = {
+        id: newId(),
+        label: trimmed,
+        paletteId: DEFAULT_TABLE_PALETTE_ID,
+        seatCount,
+        shape: opts?.shape ?? 'oval',
+      }
+      setState((s) => ({
+        ...s,
+        tables: [...s.tables, table],
+      }))
+    },
+    [],
+  )
 
   const setTablePalette = useCallback((tableId: string, paletteId: TablePaletteId) => {
     setState((s) => ({
@@ -258,6 +267,48 @@ export function useWeddingState(opts: { projectId: string | null; sync: WeddingS
       tables: s.tables.map((t) => (t.id === tableId ? { ...t, paletteId } : t)),
     }))
   }, [])
+
+  const updateTable = useCallback(
+    (
+      tableId: string,
+      patch: { seatCount?: number; shape?: TableShape },
+    ) => {
+      setState((s) => {
+        const table = s.tables.find((t) => t.id === tableId)
+        if (!table) return s
+
+        let nextSeatCount = table.seatCount
+        if (patch.seatCount !== undefined) {
+          let n = Math.round(patch.seatCount)
+          if (n < 1) n = 1
+          if (n > MAX_SEATS_PER_TABLE) n = MAX_SEATS_PER_TABLE
+          nextSeatCount = n
+        }
+
+        const nextShape = patch.shape ?? table.shape
+
+        let assignments = s.assignments
+        if (nextSeatCount < table.seatCount) {
+          assignments = { ...s.assignments }
+          for (const g of s.guests) {
+            const a = assignments[g.id]
+            if (a && a.tableId === tableId && a.seatIndex >= nextSeatCount) {
+              assignments[g.id] = null
+            }
+          }
+        }
+
+        const tables = s.tables.map((t) =>
+          t.id === tableId
+            ? { ...t, seatCount: nextSeatCount, shape: nextShape }
+            : t,
+        )
+
+        return { ...s, tables, assignments }
+      })
+    },
+    [],
+  )
 
   const removeTable = useCallback((tableId: string) => {
     setState((s) => ({
@@ -293,6 +344,9 @@ export function useWeddingState(opts: { projectId: string | null; sync: WeddingS
     const { tableId, seatIndex } = seat
 
     setState((s) => {
+      const table = s.tables.find((t) => t.id === tableId)
+      if (!table || seatIndex < 0 || seatIndex >= table.seatCount) return s
+
       const a = { ...s.assignments }
       const occupantId = Object.entries(a).find(
         ([gid, val]) =>
@@ -320,16 +374,18 @@ export function useWeddingState(opts: { projectId: string | null; sync: WeddingS
 
   const seatsForTable = useCallback(
     (tableId: string): (Guest | null)[] => {
-      const slots: (Guest | null)[] = Array(SEATS_PER_TABLE).fill(null)
+      const table = state.tables.find((t) => t.id === tableId)
+      const n = table?.seatCount ?? DEFAULT_SEAT_COUNT
+      const slots: (Guest | null)[] = Array.from({ length: n }, () => null)
       for (const g of state.guests) {
         const a = state.assignments[g.id]
-        if (a && a.tableId === tableId) {
+        if (a && a.tableId === tableId && a.seatIndex >= 0 && a.seatIndex < n) {
           slots[a.seatIndex] = g
         }
       }
       return slots
     },
-    [state.guests, state.assignments],
+    [state.guests, state.assignments, state.tables],
   )
 
   const tableOccupancy = useCallback(
@@ -356,6 +412,7 @@ export function useWeddingState(opts: { projectId: string | null; sync: WeddingS
     unseatGuest,
     addTable,
     setTablePalette,
+    updateTable,
     removeTable,
     handleDragEnd,
     unassignedGuests,
