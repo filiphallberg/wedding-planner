@@ -9,7 +9,7 @@
   "include": [
     "worker/**/*.ts",
     "shared/**/*.ts",
-    "src/state/weddingStateCodec.ts",
+    "src/state/eventStateCodec.ts",
     "src/state/types.ts",
     "src/state/constants.ts",
     "src/lib/tablePalettes.ts"

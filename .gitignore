@@ -28,3 +28,10 @@ dist-ssr
 .dev.vars
 .dev.vars.*
 .env
+
+# Cursor workspace artifacts
+.cursor/
+
+# Python cache
+__pycache__/
+*.py[cod]

@@ -1,123 +1,201 @@
-import type { Redis } from '@upstash/redis'
-import { emptyState, parseWeddingState } from '../src/state/weddingStateCodec'
-import type { WeddingState } from '../src/state/types'
+import type { Redis } from '@upstash/redis';
+import { z } from 'zod';
+import { emptyState, parseEventState } from '../src/state/eventStateCodec';
+import type { EventState } from '../src/state/types';
+import {
+  indexKey,
+  inviteKey,
+  membersLegacyKey,
+  projectBlobKey,
+  projectMemberSetKey,
+  projectMetaHashKey,
+  sharedKey,
+} from './redisKeys';
 
-export type ProjectRole = 'owner' | 'member'
+export const PROJECT_INVITE_TTL_SECONDS = 60 * 60 * 24 * 7;
 
-export type ProjectMeta = {
-  id: string
-  name: string
-  updatedAt: string
-  role?: ProjectRole
-}
+const nonEmptyStringSchema = z.string().trim().min(1);
+const emailSchema = z.string().trim().email();
 
-export type ProjectRecord = {
-  ownerId: string
-  name: string
-  state: WeddingState
-  updatedAt: string
-}
+export const projectRoleSchema = z.enum(['owner', 'member']);
+export type ProjectRole = z.infer<typeof projectRoleSchema>;
 
-const projectKey = (id: string) => `seating:project:${id}`
-const indexKey = (userId: string) => `seating:user:${userId}:index`
-const membersKey = (projectId: string) => `seating:project:${projectId}:members`
-const sharedKey = (userId: string) => `seating:user:${userId}:shared`
-const inviteKey = (token: string) => `seating:invite:${token}`
+export const projectMetaSchema = z.object({
+  id: nonEmptyStringSchema,
+  name: z.string(),
+  updatedAt: z.string(),
+  role: projectRoleSchema.optional(),
+});
+export type ProjectMeta = z.infer<typeof projectMetaSchema>;
 
-export const PROJECT_INVITE_TTL_SECONDS = 60 * 60 * 24 * 7
+const eventStateFieldSchema: z.ZodType<EventState> = z.custom<EventState>(
+  (val): val is EventState => parseEventState(val) !== null,
+);
+
+export const projectRecordSchema = z.object({
+  ownerId: nonEmptyStringSchema,
+  name: z.string(),
+  state: eventStateFieldSchema,
+  updatedAt: z.string(),
+});
+export type ProjectRecord = z.infer<typeof projectRecordSchema>;
+
+/** Redis blob before `parseEventState` on `state` */
+const projectRecordBlobSchema = z.object({
+  ownerId: nonEmptyStringSchema,
+  name: z.string(),
+  state: z.unknown(),
+  updatedAt: z.string().optional(),
+});
+
+const metaFieldsSchema = z.object({
+  ownerId: nonEmptyStringSchema,
+  name: z.string(),
+  updatedAt: z.string(),
+});
+type MetaFields = z.infer<typeof metaFieldsSchema>;
+
+export const invitePayloadSchema = z.object({
+  projectId: nonEmptyStringSchema,
+  email: emailSchema,
+});
+export type InvitePayload = z.infer<typeof invitePayloadSchema>;
+
+export const projectWithRoleSchema = z.object({
+  record: projectRecordSchema,
+  role: projectRoleSchema,
+});
+export type ProjectWithRole = z.infer<typeof projectWithRoleSchema>;
 
 export function normalizeEmail(email: string): string {
-  return email.trim().toLowerCase()
+  return email.trim().toLowerCase();
+}
+
+function parseStringArray(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.filter((item): item is string => typeof item === 'string');
+}
+
+function parseProjectMetaArray(raw: unknown): ProjectMeta[] {
+  const parsed = z.array(projectMetaSchema).safeParse(raw);
+  return parsed.success ? parsed.data : [];
 }
 
 async function readIndex(redis: Redis, userId: string): Promise<ProjectMeta[]> {
-  const raw = await redis.get<string>(indexKey(userId))
-  if (!raw) return []
+  const raw = await redis.get<string>(indexKey(userId));
+  if (!raw) return [];
   try {
-    const parsed: unknown = typeof raw === 'string' ? JSON.parse(raw) : raw
-    if (!Array.isArray(parsed)) return []
-    return parsed.filter(
-      (x): x is ProjectMeta =>
-        x !== null &&
-        typeof x === 'object' &&
-        typeof (x as ProjectMeta).id === 'string' &&
-        typeof (x as ProjectMeta).name === 'string' &&
-        typeof (x as ProjectMeta).updatedAt === 'string',
-    )
+    const parsed: unknown = typeof raw === 'string' ? JSON.parse(raw) : raw;
+    return parseProjectMetaArray(parsed);
   } catch {
-    return []
+    return [];
   }
 }
 
 async function writeIndex(redis: Redis, userId: string, list: ProjectMeta[]): Promise<void> {
-  await redis.set(indexKey(userId), JSON.stringify(list))
+  await redis.set(indexKey(userId), JSON.stringify(list));
 }
 
 async function readSharedIds(redis: Redis, userId: string): Promise<string[]> {
-  const raw = await redis.get<string>(sharedKey(userId))
-  if (!raw) return []
+  const raw = await redis.get<string>(sharedKey(userId));
+  if (!raw) return [];
   try {
-    const parsed: unknown = typeof raw === 'string' ? JSON.parse(raw) : raw
-    if (!Array.isArray(parsed)) return []
-    return parsed.filter((x): x is string => typeof x === 'string')
+    const parsed: unknown = typeof raw === 'string' ? JSON.parse(raw) : raw;
+    return parseStringArray(parsed);
   } catch {
-    return []
+    return [];
   }
 }
 
 async function writeSharedIds(redis: Redis, userId: string, ids: string[]): Promise<void> {
-  await redis.set(sharedKey(userId), JSON.stringify(ids))
+  await redis.set(sharedKey(userId), JSON.stringify(ids));
 }
 
-async function getMemberIds(redis: Redis, projectId: string): Promise<string[]> {
-  const raw = await redis.get<string>(membersKey(projectId))
-  if (!raw) return []
-  try {
-    const parsed: unknown = typeof raw === 'string' ? JSON.parse(raw) : raw
-    if (!Array.isArray(parsed)) return []
-    return parsed.filter((x): x is string => typeof x === 'string')
-  } catch {
-    return []
+async function readProjectMeta(redis: Redis, projectId: string): Promise<MetaFields | null> {
+  const raw = await redis.hgetall(projectMetaHashKey(projectId));
+  if (!raw || typeof raw !== 'object') return null;
+  const parsed = metaFieldsSchema.safeParse(raw);
+  return parsed.success ? parsed.data : null;
+}
+
+async function writeProjectMeta(redis: Redis, projectId: string, meta: MetaFields): Promise<void> {
+  await redis.hset(projectMetaHashKey(projectId), {
+    ownerId: meta.ownerId,
+    name: meta.name,
+    updatedAt: meta.updatedAt,
+  });
+}
+
+async function backfillMemberSet(redis: Redis, projectId: string, ids: string[]): Promise<void> {
+  if (ids.length === 0) return;
+  const key = projectMemberSetKey(projectId);
+  for (const memberUserId of ids) {
+    await redis.sadd(key, memberUserId);
   }
 }
 
-async function setMemberIds(redis: Redis, projectId: string, ids: string[]): Promise<void> {
-  await redis.set(membersKey(projectId), JSON.stringify(ids))
+async function getMemberIdsUnified(redis: Redis, projectId: string): Promise<string[]> {
+  const setMembers = await redis.smembers(projectMemberSetKey(projectId));
+  const fromSet = Array.isArray(setMembers)
+    ? setMembers.filter((memberId): memberId is string => typeof memberId === 'string')
+    : [];
+  if (fromSet.length > 0) {
+    return [...fromSet].sort();
+  }
+  const raw = await redis.get<string>(membersLegacyKey(projectId));
+  if (!raw) return [];
+  try {
+    const parsed: unknown = typeof raw === 'string' ? JSON.parse(raw) : raw;
+    const ids = parseStringArray(parsed);
+    if (ids.length > 0) await backfillMemberSet(redis, projectId, ids);
+    return [...ids].sort();
+  } catch {
+    return [];
+  }
+}
+
+async function writeMembersDual(redis: Redis, projectId: string, ids: string[]): Promise<void> {
+  await redis.set(membersLegacyKey(projectId), JSON.stringify(ids));
+  await redis.del(projectMemberSetKey(projectId));
+  await backfillMemberSet(redis, projectId, ids);
 }
 
 export async function readProjectRecordRaw(
   redis: Redis,
   projectId: string,
 ): Promise<ProjectRecord | null> {
-  const raw = await redis.get<string>(projectKey(projectId))
-  if (!raw) return null
+  const parsedProjectId = nonEmptyStringSchema.safeParse(projectId);
+  if (!parsedProjectId.success) return null;
+  const raw = await redis.get<string>(projectBlobKey(parsedProjectId.data));
+  if (!raw) return null;
   try {
-    const parsed: unknown = typeof raw === 'string' ? JSON.parse(raw) : raw
-    if (!parsed || typeof parsed !== 'object') return null
-    const o = parsed as Record<string, unknown>
-    if (typeof o.ownerId !== 'string') return null
-    if (typeof o.name !== 'string') return null
-    const state = parseWeddingState(o.state)
-    if (!state) return null
-    const updatedAt = typeof o.updatedAt === 'string' ? o.updatedAt : new Date().toISOString()
-    return { ownerId: o.ownerId, name: o.name, state, updatedAt }
+    const parsed: unknown = typeof raw === 'string' ? JSON.parse(raw) : raw;
+    const parsedRecord = projectRecordBlobSchema.safeParse(parsed);
+    if (!parsedRecord.success) return null;
+    const state = parseEventState(parsedRecord.data.state);
+    if (!state) return null;
+    const updatedAt = parsedRecord.data.updatedAt ?? new Date().toISOString();
+    return {
+      ownerId: parsedRecord.data.ownerId,
+      name: parsedRecord.data.name,
+      state,
+      updatedAt,
+    };
   } catch {
-    return null
+    return null;
   }
 }
 
 export async function getOwnerId(redis: Redis, projectId: string): Promise<string | null> {
-  const rec = await readProjectRecordRaw(redis, projectId)
-  return rec?.ownerId ?? null
+  const meta = await readProjectMeta(redis, projectId);
+  if (meta) return meta.ownerId;
+  const record = await readProjectRecordRaw(redis, projectId);
+  return record?.ownerId ?? null;
 }
 
-export async function isOwner(
-  redis: Redis,
-  userId: string,
-  projectId: string,
-): Promise<boolean> {
-  const owner = await getOwnerId(redis, projectId)
-  return owner === userId
+export async function isOwner(redis: Redis, userId: string, projectId: string): Promise<boolean> {
+  const owner = await getOwnerId(redis, projectId);
+  return owner === userId;
 }
 
 export async function isProjectMember(
@@ -125,18 +203,17 @@ export async function isProjectMember(
   userId: string,
   projectId: string,
 ): Promise<boolean> {
-  const members = await getMemberIds(redis, projectId)
-  return members.includes(userId)
+  const members = await getMemberIdsUnified(redis, projectId);
+  return members.includes(userId);
 }
 
-/** Owner or invited collaborator. */
 export async function canAccessProject(
   redis: Redis,
   userId: string,
   projectId: string,
 ): Promise<boolean> {
-  if (await isOwner(redis, userId, projectId)) return true
-  return isProjectMember(redis, userId, projectId)
+  if (await isOwner(redis, userId, projectId)) return true;
+  return isProjectMember(redis, userId, projectId);
 }
 
 /** @deprecated use canAccessProject */
@@ -145,33 +222,112 @@ export async function ownsProject(
   userId: string,
   projectId: string,
 ): Promise<boolean> {
-  return canAccessProject(redis, userId, projectId)
+  return canAccessProject(redis, userId, projectId);
+}
+
+/**
+ * Single round-trip friendly path: loads blob + meta + members in parallel, returns access + role.
+ */
+export async function getProjectWithRole(
+  redis: Redis,
+  userId: string,
+  projectId: string,
+): Promise<ProjectWithRole | null> {
+  const [meta, blobRaw, setMembers] = await Promise.all([
+    readProjectMeta(redis, projectId),
+    redis.get(projectBlobKey(projectId)),
+    redis.smembers(projectMemberSetKey(projectId)),
+  ]);
+
+  let record = parseBlobOrNull(blobRaw);
+  if (!record) return null;
+
+  if (meta) {
+    record = {
+      ...record,
+      ownerId: meta.ownerId,
+      name: meta.name,
+      updatedAt: meta.updatedAt,
+    };
+  }
+
+  const fromSet = Array.isArray(setMembers)
+    ? setMembers.filter((memberId): memberId is string => typeof memberId === 'string')
+    : [];
+  const memberIds =
+    fromSet.length > 0 ? [...fromSet].sort() : await getMemberIdsUnified(redis, projectId);
+
+  const ownerId = record.ownerId;
+  const isOwnerUser = ownerId === userId;
+  const isMemberUser = memberIds.includes(userId);
+  if (!isOwnerUser && !isMemberUser) return null;
+
+  return { record, role: isOwnerUser ? 'owner' : 'member' };
+}
+
+function parseBlobOrNull(blobRaw: unknown): ProjectRecord | null {
+  if (!blobRaw) return null;
+  try {
+    const parsed: unknown = typeof blobRaw === 'string' ? JSON.parse(blobRaw) : blobRaw;
+    const parsedRecord = projectRecordBlobSchema.safeParse(parsed);
+    if (!parsedRecord.success) return null;
+    const state = parseEventState(parsedRecord.data.state);
+    if (!state) return null;
+    const updatedAt = parsedRecord.data.updatedAt ?? new Date().toISOString();
+    return {
+      ownerId: parsedRecord.data.ownerId,
+      name: parsedRecord.data.name,
+      state,
+      updatedAt,
+    };
+  } catch {
+    return null;
+  }
 }
 
 export async function listProjects(redis: Redis, userId: string): Promise<ProjectMeta[]> {
-  const owned = await readIndex(redis, userId)
-  const ownedWithRole: ProjectMeta[] = owned.map((m) => ({ ...m, role: 'owner' as const }))
+  const owned = await readIndex(redis, userId);
+  const ownedWithRole: ProjectMeta[] = owned.map((projectMeta) => ({
+    ...projectMeta,
+    role: 'owner' as const,
+  }));
 
-  const sharedIds = await readSharedIds(redis, userId)
-  const sharedMetas: ProjectMeta[] = []
-  for (const id of sharedIds) {
-    if (!(await isProjectMember(redis, userId, id))) continue
-    const rec = await readProjectRecordRaw(redis, id)
-    if (!rec) continue
-    sharedMetas.push({
-      id,
-      name: rec.name,
-      updatedAt: rec.updatedAt,
-      role: 'member',
-    })
-  }
+  const sharedIds = await readSharedIds(redis, userId);
+  const sharedMetaResults = await Promise.all(
+    sharedIds.map(async (sharedProjectId): Promise<ProjectMeta | null> => {
+      const member = await isProjectMember(redis, userId, sharedProjectId);
+      if (!member) return null;
+      const meta = await readProjectMeta(redis, sharedProjectId);
+      if (meta) {
+        return {
+          id: sharedProjectId,
+          name: meta.name,
+          updatedAt: meta.updatedAt,
+          role: 'member' as const,
+        };
+      }
+      const record = await readProjectRecordRaw(redis, sharedProjectId);
+      if (!record) return null;
+      return {
+        id: sharedProjectId,
+        name: record.name,
+        updatedAt: record.updatedAt,
+        role: 'member' as const,
+      };
+    }),
+  );
+  const sharedMetas: ProjectMeta[] = sharedMetaResults.filter(
+    (projectMeta): projectMeta is ProjectMeta => projectMeta !== null,
+  );
 
-  const byId = new Map<string, ProjectMeta>()
-  for (const m of ownedWithRole) byId.set(m.id, m)
-  for (const m of sharedMetas) {
-    if (!byId.has(m.id)) byId.set(m.id, m)
+  const byId = new Map<string, ProjectMeta>();
+  for (const projectMeta of ownedWithRole) byId.set(projectMeta.id, projectMeta);
+  for (const projectMeta of sharedMetas) {
+    if (!byId.has(projectMeta.id)) byId.set(projectMeta.id, projectMeta);
   }
-  return [...byId.values()].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+  return [...byId.values()].sort((projectA, projectB) =>
+    projectB.updatedAt.localeCompare(projectA.updatedAt),
+  );
 }
 
 export async function getProject(
@@ -179,10 +335,8 @@ export async function getProject(
   userId: string,
   projectId: string,
 ): Promise<ProjectRecord | null> {
-  if (!(await canAccessProject(redis, userId, projectId))) return null
-  const rec = await readProjectRecordRaw(redis, projectId)
-  if (!rec) return null
-  return rec
+  const got = await getProjectWithRole(redis, userId, projectId);
+  return got?.record ?? null;
 }
 
 export async function createProject(
@@ -190,48 +344,67 @@ export async function createProject(
   userId: string,
   name: string,
 ): Promise<ProjectMeta> {
-  const id = crypto.randomUUID()
-  const now = new Date().toISOString()
-  const state = emptyState()
+  const parsedUserId = nonEmptyStringSchema.parse(userId);
+  const parsedName = nonEmptyStringSchema.parse(name);
+  const newProjectId = crypto.randomUUID();
+  const now = new Date().toISOString();
+  const state = emptyState();
   const record: ProjectRecord = {
-    ownerId: userId,
-    name,
+    ownerId: parsedUserId,
+    name: parsedName,
     state,
     updatedAt: now,
-  }
-  await redis.set(projectKey(id), JSON.stringify(record))
-  const list = await readIndex(redis, userId)
-  const meta: ProjectMeta = { id, name, updatedAt: now, role: 'owner' }
-  list.push(meta)
-  await writeIndex(redis, userId, list)
-  return meta
+  };
+  await redis.set(projectBlobKey(newProjectId), JSON.stringify(record));
+  await writeProjectMeta(redis, newProjectId, {
+    ownerId: parsedUserId,
+    name: parsedName,
+    updatedAt: now,
+  });
+  await writeMembersDual(redis, newProjectId, []);
+  const list = await readIndex(redis, parsedUserId);
+  const meta: ProjectMeta = {
+    id: newProjectId,
+    name: parsedName,
+    updatedAt: now,
+    role: 'owner',
+  };
+  list.push(meta);
+  await writeIndex(redis, parsedUserId, list);
+  return meta;
 }
 
 export async function saveProjectState(
   redis: Redis,
   userId: string,
   projectId: string,
-  state: WeddingState,
+  state: EventState,
 ): Promise<ProjectMeta | null> {
-  const existing = await getProject(redis, userId, projectId)
-  if (!existing) return null
-  const ownerId = existing.ownerId
-  const now = new Date().toISOString()
+  const got = await getProjectWithRole(redis, userId, projectId);
+  if (!got) return null;
+  const { record: existing } = got;
+  const ownerId = existing.ownerId;
+  const now = new Date().toISOString();
   const record: ProjectRecord = {
     ownerId,
     name: existing.name,
     state,
     updatedAt: now,
-  }
-  await redis.set(projectKey(projectId), JSON.stringify(record))
+  };
+  await redis.set(projectBlobKey(projectId), JSON.stringify(record));
+  await writeProjectMeta(redis, projectId, {
+    ownerId,
+    name: existing.name,
+    updatedAt: now,
+  });
 
-  const ownerList = await readIndex(redis, ownerId)
-  const nextOwner = ownerList.map((m) =>
-    m.id === projectId ? { ...m, updatedAt: now } : m,
-  )
-  await writeIndex(redis, ownerId, nextOwner)
+  const ownerList = await readIndex(redis, ownerId);
+  const nextOwner = ownerList.map((projectMeta) =>
+    projectMeta.id === projectId ? { ...projectMeta, updatedAt: now } : projectMeta,
+  );
+  await writeIndex(redis, ownerId, nextOwner);
 
-  return { id: projectId, name: existing.name, updatedAt: now }
+  return { id: projectId, name: existing.name, updatedAt: now };
 }
 
 export async function renameProject(
@@ -240,29 +413,30 @@ export async function renameProject(
   projectId: string,
   name: string,
 ): Promise<ProjectMeta | null> {
-  if (!(await isOwner(redis, userId, projectId))) return null
-  const existing = await readProjectRecordRaw(redis, projectId)
-  if (!existing) return null
-  const trimmed = name.trim()
-  if (!trimmed) return null
-  const now = new Date().toISOString()
+  if (!(await isOwner(redis, userId, projectId))) return null;
+  const existing = await readProjectRecordRaw(redis, projectId);
+  if (!existing) return null;
+  const parsedName = nonEmptyStringSchema.safeParse(name);
+  if (!parsedName.success) return null;
+  const trimmed = parsedName.data;
+  const now = new Date().toISOString();
   const record: ProjectRecord = {
     ...existing,
     name: trimmed,
     updatedAt: now,
-  }
-  await redis.set(projectKey(projectId), JSON.stringify(record))
-  const list = await readIndex(redis, userId)
-  const next = list.map((m) =>
-    m.id === projectId ? { ...m, name: trimmed, updatedAt: now } : m,
-  )
-  await writeIndex(redis, userId, next)
-  return { id: projectId, name: trimmed, updatedAt: now }
-}
-
-type InvitePayload = {
-  projectId: string
-  email: string
+  };
+  await redis.set(projectBlobKey(projectId), JSON.stringify(record));
+  await writeProjectMeta(redis, projectId, {
+    ownerId: existing.ownerId,
+    name: trimmed,
+    updatedAt: now,
+  });
+  const list = await readIndex(redis, userId);
+  const updatedProjectList = list.map((projectMeta) =>
+    projectMeta.id === projectId ? { ...projectMeta, name: trimmed, updatedAt: now } : projectMeta,
+  );
+  await writeIndex(redis, userId, updatedProjectList);
+  return { id: projectId, name: trimmed, updatedAt: now };
 }
 
 export async function createProjectInvite(
@@ -271,16 +445,19 @@ export async function createProjectInvite(
   projectId: string,
   email: string,
 ): Promise<{ token: string } | null> {
-  if (!(await isOwner(redis, ownerUserId, projectId))) return null
-  const emailNorm = normalizeEmail(email)
-  if (!emailNorm.includes('@')) return null
-  const owner = await getOwnerId(redis, projectId)
-  if (!owner) return null
+  if (!(await isOwner(redis, ownerUserId, projectId))) return null;
+  const parsedEmail = emailSchema.safeParse(email);
+  if (!parsedEmail.success) return null;
+  const emailNorm = normalizeEmail(parsedEmail.data);
+  const owner = await getOwnerId(redis, projectId);
+  if (!owner) return null;
 
-  const token = crypto.randomUUID()
-  const payload: InvitePayload = { projectId, email: emailNorm }
-  await redis.set(inviteKey(token), JSON.stringify(payload), { ex: PROJECT_INVITE_TTL_SECONDS })
-  return { token }
+  const token = crypto.randomUUID();
+  const payload: InvitePayload = { projectId, email: emailNorm };
+  await redis.set(inviteKey(token), JSON.stringify(payload), {
+    ex: PROJECT_INVITE_TTL_SECONDS,
+  });
+  return { token };
 }
 
 export async function acceptProjectInvite(
@@ -289,47 +466,58 @@ export async function acceptProjectInvite(
   token: string,
   userEmails: string[],
 ): Promise<ProjectMeta | null> {
-  const raw = await redis.get<string>(inviteKey(token))
-  if (!raw) return null
-  let payload: InvitePayload
+  const raw = await redis.get<string>(inviteKey(token));
+  if (!raw) return null;
+  let payload: InvitePayload;
   try {
-    const parsed: unknown = typeof raw === 'string' ? JSON.parse(raw) : raw
-    if (!parsed || typeof parsed !== 'object') return null
-    const o = parsed as Record<string, unknown>
-    if (typeof o.projectId !== 'string' || typeof o.email !== 'string') return null
-    payload = { projectId: o.projectId, email: o.email }
+    const parsed: unknown = typeof raw === 'string' ? JSON.parse(raw) : raw;
+    const parsedPayload = invitePayloadSchema.safeParse(parsed);
+    if (!parsedPayload.success) return null;
+    payload = parsedPayload.data;
   } catch {
-    return null
+    return null;
   }
 
-  const inviteNorm = normalizeEmail(payload.email)
-  const normalizedUserEmails = userEmails.map(normalizeEmail)
-  if (!normalizedUserEmails.includes(inviteNorm)) return null
+  const inviteNorm = normalizeEmail(payload.email);
+  const normalizedUserEmails = userEmails.map(normalizeEmail);
+  if (!normalizedUserEmails.includes(inviteNorm)) return null;
 
-  const ownerId = await getOwnerId(redis, payload.projectId)
-  if (!ownerId) return null
-  if (ownerId === userId) return null
+  const ownerId = await getOwnerId(redis, payload.projectId);
+  if (!ownerId) return null;
+  if (ownerId === userId) return null;
 
-  const members = await getMemberIds(redis, payload.projectId)
+  const members = await getMemberIdsUnified(redis, payload.projectId);
   if (!members.includes(userId)) {
-    members.push(userId)
-    await setMemberIds(redis, payload.projectId, members)
+    members.push(userId);
+    await redis.set(membersLegacyKey(payload.projectId), JSON.stringify(members));
+    await redis.sadd(projectMemberSetKey(payload.projectId), userId);
   }
 
-  const shared = await readSharedIds(redis, userId)
+  const shared = await readSharedIds(redis, userId);
   if (!shared.includes(payload.projectId)) {
-    shared.push(payload.projectId)
-    await writeSharedIds(redis, userId, shared)
+    shared.push(payload.projectId);
+    await writeSharedIds(redis, userId, shared);
   }
 
-  await redis.del(inviteKey(token))
+  await redis.del(inviteKey(token));
 
-  const rec = await readProjectRecordRaw(redis, payload.projectId)
-  if (!rec) return null
+  const record = await readProjectRecordRaw(redis, payload.projectId);
+  if (!record) return null;
   return {
     id: payload.projectId,
-    name: rec.name,
-    updatedAt: rec.updatedAt,
+    name: record.name,
+    updatedAt: record.updatedAt,
     role: 'member',
-  }
+  };
+}
+
+/** Current `updatedAt` for concurrency checks (meta or blob). */
+export async function getProjectUpdatedAtForConcurrency(
+  redis: Redis,
+  projectId: string,
+): Promise<string | null> {
+  const meta = await readProjectMeta(redis, projectId);
+  if (meta) return meta.updatedAt;
+  const record = await readProjectRecordRaw(redis, projectId);
+  return record?.updatedAt ?? null;
 }

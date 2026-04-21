@@ -1,4 +1,4 @@
-import * as z from 'zod/v4'
+import * as z from 'zod/v4';
 
 /** Shared between Worker (Realtime + emit) and client (typed useRealtime). */
 export const seatingRealtimeSchema = {
@@ -7,4 +7,4 @@ export const seatingRealtimeSchema = {
       stateJson: z.string(),
     }),
   },
-} as const
+} as const;
