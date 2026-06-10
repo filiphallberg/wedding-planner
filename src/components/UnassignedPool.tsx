@@ -4,11 +4,11 @@ import { useEventStateContext } from '../state/context/EventStateContext';
 import { droppableUnassigned } from '../state/utils/droppables';
 import { Button } from '../ui';
 import { cn } from '../utils';
-import { GuestChip } from './GuestChip';
+import Chip from './chip';
 
 export function UnassignedPool() {
-  const { unassignedGuests, removeGuest } = useEventStateContext();
-  const { landKeyForGuestId, onEditGuest, onOpenAddGuest } = useSeatingInteractions();
+  const { unassignedGuests } = useEventStateContext();
+  const { onOpenAddGuest } = useSeatingInteractions();
   const { setNodeRef, isOver } = useDroppable({ id: droppableUnassigned() });
 
   return (
@@ -30,7 +30,7 @@ export function UnassignedPool() {
       <div
         ref={setNodeRef}
         className={cn(
-          'flex min-h-0 flex-1 flex-col gap-3 overflow-x-auto overflow-y-hidden rounded-2xl border p-4',
+          'flex min-h-0 flex-1 flex-col gap-3 overflow-x-auto overflow-y-hidden rounded-2xl border p-3 lg:p-4',
           'transition-[background-color,border-color] duration-200',
           'lg:overflow-x-hidden lg:overflow-y-auto',
           isOver
@@ -46,18 +46,15 @@ export function UnassignedPool() {
             <p className="text-sm font-medium text-stone-400">Drag a chip here to unseat</p>
           </div>
         ) : (
-          <ul className="flex flex-row gap-3 lg:flex-col">
+          <ul
+            className={cn(
+              'flex flex-row gap-2 touch-pan-x overscroll-x-contain',
+              'lg:flex-col lg:gap-3 lg:touch-auto lg:overscroll-auto',
+            )}
+          >
             {unassignedGuests.map((g) => (
               <li key={g.id} className="shrink-0 lg:shrink">
-                <GuestChip
-                  id={g.id}
-                  name={g.name}
-                  specialNeedsNote={g.specialNeedsNote}
-                  landKey={landKeyForGuestId(g.id)}
-                  onEdit={() => onEditGuest(g)}
-                  onRemove={() => removeGuest(g.id)}
-                  className="w-48 sm:w-56 lg:w-full"
-                />
+                <Chip guest={g} scrollable className="w-auto lg:w-full" />
               </li>
             ))}
           </ul>

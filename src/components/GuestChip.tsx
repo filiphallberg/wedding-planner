@@ -22,6 +22,8 @@ export type GuestChipBodyProps = {
   /** Lifted drag preview: stronger depth and no hover jitter. */
   variant?: 'default' | 'dragOverlay';
   onAnimationEnd?: AnimationEventHandler<HTMLDivElement>;
+  /** Tighter layout below lg for horizontal pool strip. */
+  pool?: boolean;
 };
 
 /** Presentational chip (no DnD). Used inside {@link GuestChip} and {@link DragOverlay}. */
@@ -36,14 +38,23 @@ export function GuestChipBody({
   className = '',
   variant = 'default',
   onAnimationEnd,
+  pool = false,
 }: GuestChipBodyProps) {
   const noteTrimmed = specialNeedsNote.trim();
   const hasNote = noteTrimmed.length > 0;
   const title = hasNote ? `${name} — ${noteTrimmed}` : name;
 
   const textNote = compact ? 'text-xs leading-snug' : 'text-sm leading-snug';
-  const pad = compact ? 'px-2.5 py-2' : 'px-3.5 py-2.5';
-  const nameSize = compact ? 'text-sm font-semibold' : 'text-base font-semibold';
+  const pad = pool
+    ? 'px-2 py-1.5 lg:px-3.5 lg:py-2.5'
+    : compact
+      ? 'px-2.5 py-2'
+      : 'px-3.5 py-2.5';
+  const nameSize = pool
+    ? 'text-sm font-semibold lg:text-base'
+    : compact
+      ? 'text-sm font-semibold'
+      : 'text-base font-semibold';
 
   const shell =
     variant === 'dragOverlay'
@@ -61,17 +72,18 @@ export function GuestChipBody({
       title={title}
       onAnimationEnd={onAnimationEnd}
       className={cn(
-        'flex w-auto max-w-full flex-col gap-1.5 rounded-xl text-stone-900',
+        'flex w-auto max-w-full flex-col rounded-xl text-stone-900',
+        pool ? 'gap-1 lg:gap-1.5' : 'gap-1.5',
         shell,
         pad,
         className,
       )}
     >
-      <div className="flex min-w-0 items-center gap-1">
+      <div className="flex min-w-0 items-center gap-0.5 lg:gap-1">
         {hasNote && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500" aria-hidden />}
         <span className={cn('min-w-0 flex-1 truncate', nameSize)}>{name}</span>
         {showActions ? (
-          <div className="flex shrink-0 items-center gap-0.5">
+          <div className="flex shrink-0 items-center">
             {onEdit && (
               <button
                 type="button"
@@ -80,7 +92,10 @@ export function GuestChipBody({
                   e.stopPropagation();
                   onEdit();
                 }}
-                className="cursor-pointer rounded-md px-1.5 text-xs font-semibold text-stone-500 transition-colors hover:bg-stone-100 hover:text-stone-800"
+                className={cn(
+                  'cursor-pointer rounded-md font-semibold text-stone-500 transition-colors hover:bg-stone-100 hover:text-stone-800',
+                  pool ? 'px-1 text-[10px] lg:px-1.5 lg:text-xs' : 'px-1.5 text-xs',
+                )}
               >
                 Edit
               </button>
@@ -93,7 +108,10 @@ export function GuestChipBody({
                   e.stopPropagation();
                   onRemove();
                 }}
-                className="cursor-pointer rounded-md px-1.5 text-sm font-semibold text-stone-400 transition-colors hover:bg-stone-100 hover:text-rose-600"
+                className={cn(
+                  'cursor-pointer rounded-md font-semibold text-stone-400 transition-colors hover:bg-stone-100 hover:text-rose-600',
+                  pool ? 'px-0.5 text-xs lg:px-1.5 lg:text-sm' : 'px-1.5 text-sm',
+                )}
                 aria-label={removeAriaLabel ?? `Remove ${name}`}
               >
                 ×
@@ -107,7 +125,8 @@ export function GuestChipBody({
           className={cn(
             'min-w-0 whitespace-normal wrap-break-word text-stone-600',
             textNote,
-            compact && 'line-clamp-2',
+            (compact || pool) && 'line-clamp-2',
+            pool && 'hidden lg:block',
           )}
         >
           {noteTrimmed}
@@ -129,6 +148,10 @@ type Props = ComponentProps<'div'> & {
   /** Default: `Remove {name}` — use on seats for unseat wording. */
   removeAriaLabel?: string;
   onEdit?: () => void;
+  /** Allow horizontal scroll to pass through below lg (unassigned pool). */
+  scrollable?: boolean;
+  /** Tighter layout below lg for horizontal pool strip. */
+  pool?: boolean;
 };
 
 export function GuestChip({
@@ -140,6 +163,8 @@ export function GuestChip({
   onRemove,
   removeAriaLabel,
   onEdit,
+  scrollable = false,
+  pool = false,
   className,
 }: Props) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
@@ -169,7 +194,8 @@ export function GuestChip({
       {...listeners}
       {...attributes}
       className={cn(
-        'inline-block max-w-full touch-none outline-none',
+        'inline-block max-w-full outline-none',
+        scrollable ? 'touch-pan-x lg:touch-none' : 'touch-none',
         'focus-visible:rounded-lg focus-visible:ring-2 focus-visible:ring-stone-400 focus-visible:ring-offset-2 focus-visible:ring-offset-stone-50',
         className,
       )}
@@ -178,6 +204,7 @@ export function GuestChip({
         name={name}
         specialNeedsNote={specialNeedsNote}
         compact={compact}
+        pool={pool}
         onEdit={onEdit}
         onRemove={onRemove}
         removeAriaLabel={removeAriaLabel}

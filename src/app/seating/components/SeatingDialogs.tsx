@@ -5,7 +5,8 @@ import { useEventStateContext } from '../../../state/context/EventStateContext';
 import { useSeatingUIContext } from '../context/SeatingUIContext';
 
 export function SeatingDialogs() {
-  const { addGuest, addTable, updateTable, removeTable, updateGuest } = useEventStateContext();
+  const { addGuest, addTable, updateTable, removeTable, updateGuest, removeGuest } =
+    useEventStateContext();
   const { dialogs, tableEditorState } = useSeatingUIContext();
   const { tableEditor, tableFormSnapshot, closeTableEditor } = tableEditorState;
 
@@ -45,6 +46,7 @@ export function SeatingDialogs() {
               specialNeedsNote: patch.specialNeedsNote,
             });
           }}
+          onRemove={removeGuest}
         />
       ) : null}
     </>

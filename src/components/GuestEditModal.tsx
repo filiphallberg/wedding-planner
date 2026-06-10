@@ -6,9 +6,10 @@ type Props = {
   guest: Guest;
   onClose: () => void;
   onSave: (guestId: string, patch: { name: string; specialNeedsNote: string }) => void;
+  onRemove: (guestId: string) => void;
 };
 
-export function GuestEditModal({ guest, onClose, onSave }: Props) {
+export function GuestEditModal({ guest, onClose, onSave, onRemove }: Props) {
   const [name, setName] = useState(guest.name);
   const [specialNeedsNote, setSpecialNeedsNote] = useState(guest.specialNeedsNote);
 
@@ -42,6 +43,18 @@ export function GuestEditModal({ guest, onClose, onSave }: Props) {
             placeholder="e.g. vegetarian, nut allergy, wheelchair access"
           />
         </Field>
+        <Button
+          type="button"
+          variant="secondary"
+          className="w-full border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100"
+          onClick={() => {
+            onRemove(guest.id);
+            onClose();
+          }}
+        >
+          Remove guest
+        </Button>
+
         <div className="flex justify-end gap-2 pt-2">
           <Button type="button" variant="secondary" onClick={onClose}>
             Cancel

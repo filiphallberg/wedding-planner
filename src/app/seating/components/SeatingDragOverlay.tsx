@@ -1,6 +1,6 @@
 import { DragOverlay } from '@dnd-kit/core';
-import { GuestChipBody } from '../../../components/GuestChip';
 import { useSeatingUIContext } from '../context/SeatingUIContext';
+import { ChipBody } from '../../../components/chip';
 
 export function SeatingDragOverlay() {
   const { drag } = useSeatingUIContext();
@@ -9,12 +9,10 @@ export function SeatingDragOverlay() {
   return (
     <DragOverlay zIndex={200}>
       {activeDragGuest ? (
-        <GuestChipBody
-          name={activeDragGuest.guest.name}
-          specialNeedsNote={activeDragGuest.guest.specialNeedsNote}
-          compact={activeDragGuest.compact}
-          showActions={false}
-          variant="dragOverlay"
+        <ChipBody
+          guest={activeDragGuest.guest}
+          actions={false}
+          variant="drag"
           className="cursor-grabbing"
         />
       ) : null}
