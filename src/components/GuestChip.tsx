@@ -41,27 +41,27 @@ export function GuestChipBody({
   const hasNote = noteTrimmed.length > 0;
   const title = hasNote ? `${name} — ${noteTrimmed}` : name;
 
-  const textNote = compact ? 'text-[0.65rem] leading-snug' : 'text-xs leading-snug';
-  const pad = compact ? 'px-2 py-1.5' : 'px-2.5 py-1.5';
-  const nameSize = compact ? 'text-xs font-medium' : 'text-sm font-medium';
+  const textNote = compact ? 'text-xs leading-snug' : 'text-sm leading-snug';
+  const pad = compact ? 'px-2.5 py-2' : 'px-3.5 py-2.5';
+  const nameSize = compact ? 'text-sm font-semibold' : 'text-base font-semibold';
 
   const shell =
     variant === 'dragOverlay'
-      ? 'border border-stone-300 bg-white ring-1 ring-stone-300/80 motion-safe:scale-[1.02]'
-      : [
-          'border border-stone-200 bg-white',
-          'motion-safe:transition-[transform,border-color,background-color]',
+      ? 'border border-stone-300 bg-white shadow-lg ring-1 ring-stone-300/50 scale-[1.02]'
+      : cn(
+          'border border-stone-200/80 bg-white',
+          'motion-safe:transition-[transform,border-color,box-shadow]',
           'motion-safe:duration-200 motion-safe:ease-out',
-          'motion-safe:hover:-translate-y-0.5 motion-safe:hover:border-stone-300 motion-safe:hover:bg-stone-50/80',
+          'motion-safe:hover:-translate-y-0.5 motion-safe:hover:border-stone-300 motion-safe:hover:shadow-sm',
           'motion-reduce:hover:translate-y-0',
-        ].join(' ');
+        );
 
   return (
     <div
       title={title}
       onAnimationEnd={onAnimationEnd}
       className={cn(
-        'flex w-auto max-w-full flex-col gap-1 rounded-lg text-stone-900',
+        'flex w-auto max-w-full flex-col gap-1.5 rounded-xl text-stone-900',
         shell,
         pad,
         className,
@@ -69,7 +69,7 @@ export function GuestChipBody({
     >
       <div className="flex min-w-0 items-center gap-1">
         {hasNote && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500" aria-hidden />}
-        <span className={`min-w-0 flex-1 truncate ${nameSize}`}>{name}</span>
+        <span className={cn('min-w-0 flex-1 truncate', nameSize)}>{name}</span>
         {showActions ? (
           <div className="flex shrink-0 items-center gap-0.5">
             {onEdit && (
@@ -80,7 +80,7 @@ export function GuestChipBody({
                   e.stopPropagation();
                   onEdit();
                 }}
-                className="cursor-pointer rounded px-1 text-[0.65rem] text-stone-500 transition-colors hover:bg-stone-100 hover:text-stone-800"
+                className="cursor-pointer rounded-md px-1.5 text-xs font-semibold text-stone-500 transition-colors hover:bg-stone-100 hover:text-stone-800"
               >
                 Edit
               </button>
@@ -93,7 +93,7 @@ export function GuestChipBody({
                   e.stopPropagation();
                   onRemove();
                 }}
-                className="cursor-pointer rounded px-1 text-xs text-stone-500 transition-colors hover:bg-stone-100 hover:text-stone-800"
+                className="cursor-pointer rounded-md px-1.5 text-sm font-semibold text-stone-400 transition-colors hover:bg-stone-100 hover:text-rose-600"
                 aria-label={removeAriaLabel ?? `Remove ${name}`}
               >
                 ×
@@ -104,9 +104,11 @@ export function GuestChipBody({
       </div>
       {hasNote ? (
         <p
-          className={`min-w-0 whitespace-normal wrap-break-word text-stone-600 ${textNote} ${
-            compact ? 'line-clamp-2' : ''
-          }`}
+          className={cn(
+            'min-w-0 whitespace-normal wrap-break-word text-stone-600',
+            textNote,
+            compact && 'line-clamp-2',
+          )}
         >
           {noteTrimmed}
         </p>
@@ -121,7 +123,7 @@ type Props = ComponentProps<'div'> & {
   specialNeedsNote?: string;
   /** Smaller chip for seats around an oval table. */
   compact?: boolean;
-  /** Incremented when this guest is placed after a drag; triggers a short “pop”. */
+  /** Incremented when this guest is placed after a drag; triggers a short "pop". */
   landKey?: number;
   onRemove?: () => void;
   /** Default: `Remove {name}` — use on seats for unseat wording. */
@@ -154,8 +156,6 @@ export function GuestChip({
     prevLand.current = landKey;
   }, [landKey]);
 
-  // With DragOverlay, do not translate the source while dragging — transform still
-  // affects scroll overflow on ancestors (overflow-auto / sticky) even at opacity 0.
   const style = isDragging
     ? { opacity: 0 }
     : transform
@@ -169,7 +169,8 @@ export function GuestChip({
       {...listeners}
       {...attributes}
       className={cn(
-        'inline-block max-w-full touch-none outline-none focus-visible:rounded-lg focus-visible:ring-2 focus-visible:ring-stone-400 focus-visible:ring-offset-2 focus-visible:ring-offset-stone-50',
+        'inline-block max-w-full touch-none outline-none',
+        'focus-visible:rounded-lg focus-visible:ring-2 focus-visible:ring-stone-400 focus-visible:ring-offset-2 focus-visible:ring-offset-stone-50',
         className,
       )}
     >

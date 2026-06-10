@@ -1,11 +1,12 @@
 import { useEffect, useLayoutEffect, useState } from 'react';
 import {
   DEFAULT_TABLE_PALETTE_ID,
-  getTablePalette,
   isTablePaletteId,
+  TABLE_PALETTE_LABELS,
   TABLE_PALETTE_OPTIONS,
   type TablePaletteId,
 } from '../lib/tablePalettes';
+import { tableVariantSlots } from '../lib/tablePaletteVariants';
 import { SHAPE_LABELS, TABLE_SHAPES, type TableShape } from '../lib/tableShapes';
 import { DEFAULT_SEAT_COUNT, MAX_SEATS_PER_TABLE } from '../state/constants';
 import { Button, Dialog, Field, Input, SelectMenu } from '../ui';
@@ -48,7 +49,6 @@ export function TableFormDialog({
   onUpdate,
   onRemove,
 }: Props) {
-  /** Kept while `open` animates out so edit chrome (e.g. Remove) does not jump before the dialog closes. */
   const [surfaceEditTableId, setSurfaceEditTableId] = useState<string | null>(null);
   const [label, setLabel] = useState('');
   const [seatCount, setSeatCount] = useState(DEFAULT_SEAT_COUNT);
@@ -69,17 +69,10 @@ export function TableFormDialog({
     setPaletteId(initial.paletteId);
   }, [open, initial?.label, initial?.seatCount, initial?.shape, initial?.paletteId]);
 
-  const palette = getTablePalette(paletteId);
-
   const submit = () => {
     const trimmed = label.trim();
     if (!trimmed) return;
-    const payload: TableFormSnapshot = {
-      label: trimmed,
-      seatCount,
-      shape,
-      paletteId,
-    };
+    const payload: TableFormSnapshot = { label: trimmed, seatCount, shape, paletteId };
     if (editingTableId) {
       onUpdate(editingTableId, payload);
     } else {
@@ -113,6 +106,7 @@ export function TableFormDialog({
             autoFocus
           />
         </Field>
+
         <div className="grid grid-cols-2 gap-3">
           <Field id="table-form-seats" label="Seats">
             <Input
@@ -140,9 +134,10 @@ export function TableFormDialog({
             />
           </div>
         </div>
+
         <div>
-          <span className="mb-1 block text-xs font-medium text-stone-700">
-            Color ({palette.label})
+          <span className="mb-1 block text-xs font-medium text-stone-600">
+            Color — {TABLE_PALETTE_LABELS[paletteId]}
           </span>
           <div className="flex items-center gap-2">
             <div
@@ -150,7 +145,9 @@ export function TableFormDialog({
               aria-hidden
             >
               <div
-                className={`pointer-events-none absolute inset-0 rounded-full ${palette.swatch}`}
+                className={tableVariantSlots(shape, paletteId).swatch({
+                  className: 'pointer-events-none',
+                })}
               />
             </div>
             <SelectMenu
@@ -165,11 +162,12 @@ export function TableFormDialog({
             />
           </div>
         </div>
+
         {surfaceEditTableId ? (
           <Button
             type="button"
             variant="secondary"
-            className="w-full border-rose-200 bg-rose-50/80 text-rose-800 hover:bg-rose-100"
+            className="w-full border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100"
             onClick={() => {
               onRemove(surfaceEditTableId);
               onClose();
@@ -178,6 +176,7 @@ export function TableFormDialog({
             Remove table
           </Button>
         ) : null}
+
         <div className="flex justify-end gap-2 pt-2">
           <Button type="button" variant="secondary" onClick={onClose}>
             Cancel

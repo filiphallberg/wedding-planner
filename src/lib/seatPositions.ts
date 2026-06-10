@@ -81,11 +81,59 @@ function seatPositionOnRectanglePerimeter(
   };
 }
 
+/**
+ * Place seats along the perimeter of a rectangle with an arbitrary aspect ratio.
+ * Distance is measured in normalized box units (halfW = aspectRatio, halfH = 1) so seats
+ * are spaced proportionally to actual edge length: a long rectangle puts most seats on the
+ * long edges. Anchors are emitted as percentages of the container's own width/height,
+ * inset by `insetXPct` / `insetYPct` from the box center.
+ */
+function seatPositionOnAspectPerimeter(
+  index: number,
+  count: number,
+  aspectRatio: number,
+  insetXPct: number,
+  insetYPct: number,
+): { left: string; top: string } {
+  if (count <= 0) return { left: '50%', top: '50%' };
+  const halfW = Math.max(aspectRatio, 0.0001);
+  const halfH = 1;
+  const W = 2 * halfW;
+  const H = 2 * halfH;
+  const P = 2 * W + 2 * H;
+  let d = (index / count) * P;
+  type Seg = { x0: number; y0: number; dx: number; dy: number; len: number };
+  const segments: Seg[] = [
+    { x0: 0, y0: -halfH, dx: 1, dy: 0, len: halfW },
+    { x0: halfW, y0: -halfH, dx: 0, dy: 1, len: H },
+    { x0: halfW, y0: halfH, dx: -1, dy: 0, len: W },
+    { x0: -halfW, y0: halfH, dx: 0, dy: -1, len: H },
+    { x0: -halfW, y0: -halfH, dx: 1, dy: 0, len: halfW },
+  ];
+  let ox = 0;
+  let oy = -halfH;
+  for (const seg of segments) {
+    if (d <= seg.len) {
+      ox = seg.x0 + seg.dx * d;
+      oy = seg.y0 + seg.dy * d;
+      break;
+    }
+    d -= seg.len;
+  }
+  const xPct = (ox / halfW) * insetXPct;
+  const yPct = (oy / halfH) * insetYPct;
+  return {
+    left: `${50 + xPct}%`,
+    top: `${50 + yPct}%`,
+  };
+}
+
 /** Seat anchor for drag-and-drop layout: oval / round use elliptical or circular paths; square / rectangle use the perimeter. */
 export function seatPositionForShape(
   index: number,
   count: number,
   shape: TableShape,
+  aspectRatio?: number,
 ): { left: string; top: string } {
   switch (shape) {
     case 'oval':
@@ -95,6 +143,6 @@ export function seatPositionForShape(
     case 'square':
       return seatPositionOnRectanglePerimeter(index, count, RX_PCT, RX_PCT);
     case 'rectangle':
-      return seatPositionOnRectanglePerimeter(index, count, RX_PCT, RY_PCT);
+      return seatPositionOnAspectPerimeter(index, count, aspectRatio ?? 7 / 5, RX_PCT, RY_PCT);
   }
 }

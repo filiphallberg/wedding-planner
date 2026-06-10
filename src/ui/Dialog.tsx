@@ -16,8 +16,8 @@ export type DialogProps = {
 const EXIT_MS = 240;
 
 /**
- * Modal shell using the native &lt;dialog&gt; element (showModal / backdrop / focus trap).
- * Closing runs a short exit animation before calling &lt;dialog&gt;.close().
+ * Modal shell using the native <dialog> element (showModal / backdrop / focus trap).
+ * Closing runs a short exit animation before calling <dialog>.close().
  */
 export function Dialog({
   open,
@@ -41,9 +41,6 @@ export function Dialog({
       return;
     }
 
-    // Parent closed: animate only if the native dialog is still open (survives StrictMode
-    // re-running this effect — we do not track a separate "prevOpen" ref that would go
-    // false before close() runs).
     if (!el.open) return;
 
     setExiting(true);
@@ -82,8 +79,6 @@ export function Dialog({
     <dialog
       ref={ref}
       className={cn(
-        // Do not set display:flex (or other non-none display) on <dialog>: it overrides the
-        // UA closed state and every instance would paint on load before showModal().
         'm-0 max-h-none w-full max-w-none border-0 bg-transparent p-0',
         'overscroll-contain backdrop:bg-stone-900/20',
         zIndexClass,
@@ -99,13 +94,13 @@ export function Dialog({
       >
         <div
           className={cn(
-            'dialog-panel-motion w-full rounded-lg border border-stone-200 bg-white p-5',
+            'dialog-panel-motion w-full rounded-3xl border border-stone-200/80 bg-white p-7 shadow-xl shadow-stone-900/8',
             exiting && 'dialog-panel-exiting',
             panelMaxWidthClass,
           )}
           onMouseDown={(e) => e.stopPropagation()}
         >
-          <h2 id={titleId} className="text-base font-medium text-stone-900">
+          <h2 id={titleId} className="font-display text-2xl font-bold text-stone-900">
             {title}
           </h2>
           {children}

@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react';
 import { Navigate, Route, Routes, useNavigate, useParams } from 'react-router-dom';
+import { EventStateProvider } from '../state/context/EventStateContext';
 import {
   createLocalProject,
   listLocalProjects,
-  migrateLegacyLocalStorageIfNeeded,
   renameLocalProject,
 } from '../state/localProjectStorage';
-import { useEventState } from '../state/useEventState';
+import { ensureLocalProjectsReady } from './ensureLocalProjectsReady';
 import { SeatingLayout } from './SeatingLayout';
 
 function LocalIndexRoute() {
@@ -14,12 +14,7 @@ function LocalIndexRoute() {
 
   useEffect(() => {
     const t = window.setTimeout(() => {
-      migrateLegacyLocalStorageIfNeeded();
-      let list = listLocalProjects().map((p) => ({ ...p }));
-      if (list.length === 0) {
-        const p = createLocalProject('Main');
-        list = [{ id: p.id, name: p.name, updatedAt: p.updatedAt }];
-      }
+      const list = ensureLocalProjectsReady();
       navigate(`/projects/${list[0]!.id}`, { replace: true });
     }, 0);
     return () => window.clearTimeout(t);
@@ -36,13 +31,8 @@ function LocalProjectRoute() {
 
   useEffect(() => {
     const t = window.setTimeout(() => {
-      migrateLegacyLocalStorageIfNeeded();
-      let list = listLocalProjects().map((p) => ({ ...p }));
-      if (list.length === 0) {
-        const p = createLocalProject('Main');
-        list = [{ id: p.id, name: p.name, updatedAt: p.updatedAt }];
-      }
-      setProjects(list);
+      const list = ensureLocalProjectsReady();
+      setProjects(list.map((p) => ({ ...p })));
       setReady(true);
     }, 0);
     return () => window.clearTimeout(t);
@@ -56,7 +46,6 @@ function LocalProjectRoute() {
   }, [navigate, projectId, projects, ready]);
 
   const activeId = ready && projects.some((p) => p.id === projectId) ? projectId : null;
-  const eventState = useEventState({ projectId: activeId, sync: 'local' });
 
   if (!ready || !activeId) {
     return (
@@ -81,17 +70,18 @@ function LocalProjectRoute() {
   };
 
   return (
-    <SeatingLayout
-      projectControls={{
-        projectId: activeId,
-        projects,
-        onSelectProject: (id) => navigate(`/projects/${id}`),
-        onNewProject,
-        onRenameProject: onRename,
-      }}
-      userSlot={<span className="text-xs text-stone-500">Local mode (no Clerk)</span>}
-      eventState={eventState}
-    />
+    <EventStateProvider key={activeId} projectId={activeId} sync="local">
+      <SeatingLayout
+        projectControls={{
+          projectId: activeId,
+          projects,
+          onSelectProject: (id) => navigate(`/projects/${id}`),
+          onNewProject,
+          onRenameProject: onRename,
+        }}
+        userSlot={null}
+      />
+    </EventStateProvider>
   );
 }
 

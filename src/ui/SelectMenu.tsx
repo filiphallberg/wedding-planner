@@ -16,7 +16,7 @@ type Props<T extends string> = {
 };
 
 /**
- * Single-choice dropdown styled like {@link MenuDisclosure}; does not use native &lt;select&gt;.
+ * Single-choice dropdown styled like MenuDisclosure; does not use native <select>.
  */
 export function SelectMenu<T extends string>({
   value,
@@ -52,8 +52,9 @@ export function SelectMenu<T extends string>({
         aria-controls={listId}
         aria-disabled={disabled}
         className={cn(
-          'flex cursor-pointer list-none items-center gap-1.5 rounded-md border border-stone-200 bg-white px-3 py-2 text-sm font-medium text-stone-800 transition-colors hover:border-stone-300 hover:bg-stone-50',
-          'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-stone-400',
+          'flex cursor-pointer list-none items-center gap-2 rounded-xl border border-stone-200/80 bg-white px-3.5 py-2.5 text-sm font-semibold text-stone-900',
+          'transition-colors duration-150 hover:border-stone-300 hover:bg-stone-50',
+          'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-stone-500',
           disabled && 'cursor-not-allowed hover:border-stone-200 hover:bg-white',
           '[&::-webkit-details-marker]:hidden',
           summaryClassName,
@@ -74,7 +75,7 @@ export function SelectMenu<T extends string>({
         id={listId}
         role="listbox"
         className={cn(
-          'menu-panel absolute z-40 mt-1 min-w-[calc(100%+0px)] rounded-lg border border-stone-200 bg-white p-1',
+          'menu-panel absolute z-40 mt-2 min-w-[calc(100%+0px)] rounded-2xl border border-stone-200/80 bg-white p-1.5 shadow-lg shadow-stone-900/6',
           align === 'end' ? 'right-0' : 'left-0',
         )}
       >
@@ -110,8 +111,8 @@ function SelectMenuRow({
       role="option"
       aria-selected={selected}
       className={cn(
-        'flex w-full cursor-pointer items-center rounded-md px-3 py-2 text-left text-sm transition-colors',
-        selected ? 'bg-stone-100 font-medium text-stone-900' : 'text-stone-800 hover:bg-stone-50',
+        'flex w-full cursor-pointer items-center rounded-xl px-3.5 py-2.5 text-left text-sm font-medium transition-colors duration-150',
+        selected ? 'bg-stone-100 font-semibold text-stone-900' : 'text-stone-800 hover:bg-stone-50',
       )}
       onClick={onPick}
     >

@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { Navigate, Route, Routes, useNavigate, useParams } from 'react-router-dom';
 import { InviteCollaboratorsDialog } from '../components/InviteCollaboratorsDialog';
 import { appUrl } from '../lib/appUrl';
-import { useEventState } from '../state/useEventState';
+import { EventStateProvider } from '../state/context/EventStateContext';
 import { SeatingLayout } from './SeatingLayout';
 import { useCloudProjects } from './useCloudProjects';
 
@@ -70,11 +70,6 @@ function CloudProjectRoute() {
     }
   }, [activeId, defaultProjectId, isLoaded, isSignedIn, loading, navigate, projects.length]);
 
-  const eventState = useEventState({
-    projectId: activeId,
-    sync: 'cloud',
-  });
-
   if (!isLoaded) {
     return (
       <div className="flex min-h-svh items-center justify-center text-stone-600">Loading…</div>
@@ -111,11 +106,12 @@ function CloudProjectRoute() {
 
   return (
     <>
-      <SeatingLayout
-        projectControls={projectControls}
-        userSlot={<UserButton afterSignOutUrl={afterSignOutUrl} />}
-        eventState={eventState}
-      />
+      <EventStateProvider key={activeId} projectId={activeId} sync="cloud">
+        <SeatingLayout
+          projectControls={projectControls}
+          userSlot={<UserButton afterSignOutUrl={afterSignOutUrl} />}
+        />
+      </EventStateProvider>
       <InviteCollaboratorsDialog
         projectId={activeId}
         open={inviteOpen && Boolean(activeId)}
