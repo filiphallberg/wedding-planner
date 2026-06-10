@@ -50,8 +50,6 @@ type SeatProps = ComponentProps<'div'> & {
   shape: TableShape;
   seatCount: number;
   aspectRatio?: number;
-  landKey: number;
-  onEditGuest?: () => void;
 };
 
 export function Seat({
@@ -61,8 +59,6 @@ export function Seat({
   shape,
   seatCount,
   aspectRatio,
-  landKey,
-  onEditGuest,
   className,
   ...props
 }: SeatProps) {

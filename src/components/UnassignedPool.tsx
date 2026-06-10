@@ -12,8 +12,8 @@ export function UnassignedPool() {
   const { setNodeRef, isOver } = useDroppable({ id: droppableUnassigned() });
 
   return (
-    <section className="flex min-h-0 flex-1 flex-col gap-5">
-      <div className="flex shrink-0 items-center justify-between gap-3">
+    <section className="flex min-h-0 flex-1 flex-col gap-2">
+      <div className="flex shrink-0 items-center justify-between gap-2">
         <div className="flex items-baseline gap-3">
           <span className="font-display text-xs font-bold tracking-wider text-stone-600 uppercase">
             Guests

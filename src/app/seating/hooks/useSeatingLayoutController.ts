@@ -4,7 +4,6 @@ import type { ProjectControls } from '../types';
 import { useActiveProject } from './useActiveProject';
 import { useDndSensors } from './useDndSensors';
 import { useDragEdgeScroll } from './useDragEdgeScroll';
-import { useGuestLandKeys } from './useGuestLandKeys';
 import { useRosterWidth } from './useRosterWidth';
 import { useSeatingDialogs } from './useSeatingDialogs';
 import { useSeatingDrag } from './useSeatingDrag';
@@ -19,14 +18,12 @@ export function useSeatingLayoutController(
   const sensors = useDndSensors();
   const sortedTables = useSortedTables(eventState.state.tables);
   const { projectMenuLabel } = useActiveProject(projectControls);
-  const landKeys = useGuestLandKeys();
   const roster = useRosterWidth();
   const tableEditorState = useTableEditor(eventState.state.tables);
   const dialogs = useSeatingDialogs();
   const drag = useSeatingDrag({
     guests: eventState.state.guests,
     handleDragEnd: eventState.handleDragEnd,
-    recordGuestLandings: landKeys.recordGuestLandings,
   });
 
   useDragEdgeScroll(mainScrollRef, drag.activeDragGuest, drag.dragPointer);
@@ -36,7 +33,6 @@ export function useSeatingLayoutController(
     sensors,
     sortedTables,
     projectMenuLabel,
-    landKeys,
     roster,
     tableEditorState,
     dialogs,

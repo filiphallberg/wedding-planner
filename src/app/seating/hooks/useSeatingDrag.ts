@@ -2,15 +2,14 @@ import type { DragEndEvent, DragMoveEvent, DragStartEvent } from '@dnd-kit/core'
 import { useCallback, useState } from 'react';
 import type { Guest } from '../../../state/types';
 
-type ActiveDragGuest = { guest: Guest; compact: boolean } | null;
+type ActiveDragGuest = { guest: Guest } | null;
 
 type Options = {
   guests: Guest[];
-  handleDragEnd: (event: DragEndEvent) => string[];
-  recordGuestLandings: (guestIds: string[]) => void;
+  handleDragEnd: (event: DragEndEvent) => void;
 };
 
-export function useSeatingDrag({ guests, handleDragEnd, recordGuestLandings }: Options) {
+export function useSeatingDrag({ guests, handleDragEnd }: Options) {
   const [activeDragGuest, setActiveDragGuest] = useState<ActiveDragGuest>(null);
   const [dragPointer, setDragPointer] = useState<{ x: number; y: number } | null>(null);
 
@@ -23,12 +22,7 @@ export function useSeatingDrag({ guests, handleDragEnd, recordGuestLandings }: O
     (event: DragStartEvent) => {
       const guestId = String(event.active.id);
       const guest = guests.find((g) => g.id === guestId);
-      if (!guest) {
-        setActiveDragGuest(null);
-        return;
-      }
-      const compact = Boolean(event.active.data.current?.compact);
-      setActiveDragGuest({ guest, compact });
+      setActiveDragGuest(guest ? { guest } : null);
     },
     [guests],
   );
@@ -45,9 +39,9 @@ export function useSeatingDrag({ guests, handleDragEnd, recordGuestLandings }: O
   const onDragEnd = useCallback(
     (event: DragEndEvent) => {
       clearDrag();
-      recordGuestLandings(handleDragEnd(event));
+      handleDragEnd(event);
     },
-    [clearDrag, handleDragEnd, recordGuestLandings],
+    [clearDrag, handleDragEnd],
   );
 
   const onDragCancel = clearDrag;

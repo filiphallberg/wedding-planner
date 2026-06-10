@@ -51,10 +51,3 @@ export function removeGuestFromState(state: EventState, guestId: string): EventS
     assignments: restAssignments,
   };
 }
-
-export function unseatGuestInState(state: EventState, guestId: string): EventState {
-  return {
-    ...state,
-    assignments: { ...state.assignments, [guestId]: null },
-  };
-}

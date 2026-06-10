@@ -2,7 +2,6 @@ import { createContext, type PropsWithChildren, useContext } from 'react';
 import type { Guest } from '../../../state/types';
 
 export type SeatingInteractions = {
-  landKeyForGuestId: (guestId: string) => number;
   onEditGuest: (guest: Guest) => void;
   onOpenAddGuest: () => void;
 };

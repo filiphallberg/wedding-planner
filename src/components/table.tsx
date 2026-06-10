@@ -1,4 +1,3 @@
-import { useSeatingInteractions } from '../app/seating/context/SeatingInteractionsContext';
 import { tableVariantSlots } from '../lib/tablePaletteVariants';
 import { useEventStateContext } from '../state/context/EventStateContext';
 import { droppableSeat } from '../state/utils/droppables';
@@ -11,7 +10,6 @@ type TableProps = {
 
 export function Table({ tableId, onOpenTableSetup }: TableProps) {
   const { state, seatsForTable, tableOccupancy } = useEventStateContext();
-  const { landKeyForGuestId, onEditGuest } = useSeatingInteractions();
 
   const table = state.tables.find((t) => t.id === tableId);
 
@@ -59,8 +57,6 @@ export function Table({ tableId, onOpenTableSetup }: TableProps) {
               guest={seatGuest}
               shape={shape}
               seatCount={seatCount}
-              landKey={seatGuest ? landKeyForGuestId(seatGuest.id) : 0}
-              onEditGuest={seatGuest ? () => onEditGuest(seatGuest) : undefined}
             />
           ))}
         </div>

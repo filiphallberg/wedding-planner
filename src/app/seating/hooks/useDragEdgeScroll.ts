@@ -1,7 +1,7 @@
 import { type RefObject, useEffect } from 'react';
 import { applyDragEdgeScroll } from '../utils/dragEdgeScroll';
 
-type ActiveDrag = { guest: unknown; compact: boolean } | null;
+type ActiveDrag = { guest: unknown } | null;
 
 export function useDragEdgeScroll(
   mainScrollRef: RefObject<HTMLElement | null>,

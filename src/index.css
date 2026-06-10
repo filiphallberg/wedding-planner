@@ -3,18 +3,6 @@
 
 /* ── Keyframes ───────────────────────────────────────────── */
 
-@keyframes guest-pop {
-  0% {
-    transform: scale(0.88);
-  }
-  55% {
-    transform: scale(1.06);
-  }
-  100% {
-    transform: scale(1);
-  }
-}
-
 @keyframes table-enter {
   from {
     opacity: 0;
@@ -113,9 +101,6 @@ details[open] > .menu-panel {
   animation: dialog-out 0.22s cubic-bezier(0.4, 0, 1, 1) both;
 }
 
-.guest-pop-motion {
-  animation: guest-pop 0.44s cubic-bezier(0.22, 1, 0.36, 1) both;
-}
 .table-card-enter {
   animation: table-enter 0.42s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
@@ -124,7 +109,6 @@ details[open] > .menu-panel {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .guest-pop-motion,
   .dialog-panel-motion,
   .dialog-panel-exiting,
   .overlay-motion,
@@ -148,7 +132,7 @@ body {
   margin: 0;
   min-height: 100svh;
   font-family: "DM Sans", system-ui, -apple-system, sans-serif;
-  @apply bg-stone-50 text-stone-900 antialiased;
+  @apply bg-[#efece8] text-stone-900 antialiased;
   font-size: 15px;
   line-height: 1.55;
 }

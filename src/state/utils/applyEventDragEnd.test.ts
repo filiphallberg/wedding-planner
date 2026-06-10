@@ -31,14 +31,12 @@ describe('applyEventDragEnd', () => {
 
   test('unassigns a guest', () => {
     const result = applyEventDragEnd(baseState, dragEnd('g1', droppableUnassigned()));
-    expect(result?.next.assignments.g1).toBeNull();
-    expect(result?.flashGuestIds).toEqual(['g1']);
+    expect(result?.assignments.g1).toBeNull();
   });
 
   test('assigns a guest to an empty seat', () => {
     const result = applyEventDragEnd(baseState, dragEnd('g2', droppableSeat('t1', 1)));
-    expect(result?.next.assignments.g2).toEqual({ tableId: 't1', seatIndex: 1 });
-    expect(result?.flashGuestIds).toEqual(['g2']);
+    expect(result?.assignments.g2).toEqual({ tableId: 't1', seatIndex: 1 });
   });
 
   test('swaps guests when dropping on an occupied seat', () => {
@@ -51,8 +49,7 @@ describe('applyEventDragEnd', () => {
     };
 
     const result = applyEventDragEnd(seated, dragEnd('g2', droppableSeat('t1', 0)));
-    expect(result?.next.assignments.g1).toEqual({ tableId: 't1', seatIndex: 1 });
-    expect(result?.next.assignments.g2).toEqual({ tableId: 't1', seatIndex: 0 });
-    expect(result?.flashGuestIds).toEqual(['g2', 'g1']);
+    expect(result?.assignments.g1).toEqual({ tableId: 't1', seatIndex: 1 });
+    expect(result?.assignments.g2).toEqual({ tableId: 't1', seatIndex: 0 });
   });
 });

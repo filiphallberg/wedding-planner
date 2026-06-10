@@ -1,7 +1,4 @@
 import type { ReactNode } from 'react';
-import type { LayoutEvent } from '../../state/useEventState';
-
-export type { LayoutEvent };
 
 export type ProjectControls = {
   projectId: string | null;

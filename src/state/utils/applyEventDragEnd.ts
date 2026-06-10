@@ -2,9 +2,7 @@ import type { DragEndEvent } from '@dnd-kit/core';
 import type { EventState } from '../types';
 import { droppableUnassigned, parseSeatDroppable } from './droppables';
 
-export type DragApplyResult = { next: EventState; flashGuestIds: string[] };
-
-export function applyEventDragEnd(prev: EventState, event: DragEndEvent): DragApplyResult | null {
+export function applyEventDragEnd(prev: EventState, event: DragEndEvent): EventState | null {
   const { active, over } = event;
   if (!over) return null;
 
@@ -13,8 +11,8 @@ export function applyEventDragEnd(prev: EventState, event: DragEndEvent): DragAp
 
   if (overId === droppableUnassigned()) {
     return {
-      next: { ...prev, assignments: { ...prev.assignments, [guestId]: null } },
-      flashGuestIds: [guestId],
+      ...prev,
+      assignments: { ...prev.assignments, [guestId]: null },
     };
   }
 
@@ -31,17 +29,14 @@ export function applyEventDragEnd(prev: EventState, event: DragEndEvent): DragAp
   )?.[0];
 
   const a = { ...prev.assignments };
-  let flashGuestIds: string[];
   if (occupantId) {
     const gA = a[guestId];
     const gB = a[occupantId];
     a[guestId] = gB;
     a[occupantId] = gA;
-    flashGuestIds = [guestId, occupantId];
   } else {
     a[guestId] = { tableId, seatIndex };
-    flashGuestIds = [guestId];
   }
 
-  return { next: { ...prev, assignments: a }, flashGuestIds };
+  return { ...prev, assignments: a };
 }

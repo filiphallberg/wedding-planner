@@ -18,11 +18,10 @@ export function SeatingUIProvider({ children }: PropsWithChildren) {
 
   const interactions = useMemo<SeatingInteractions>(
     () => ({
-      landKeyForGuestId: value.landKeys.landKeyForGuestId,
       onEditGuest: value.dialogs.setEditingGuest,
       onOpenAddGuest: value.dialogs.openAddGuest,
     }),
-    [value.landKeys.landKeyForGuestId, value.dialogs.setEditingGuest, value.dialogs.openAddGuest],
+    [value.dialogs.setEditingGuest, value.dialogs.openAddGuest],
   );
 
   return (

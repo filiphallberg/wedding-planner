@@ -8,7 +8,7 @@ export function SeatingHeader() {
   const { state } = useEventStateContext();
 
   return (
-    <header className="shrink-0 border-b border-stone-200/70 bg-white px-3 py-3 sm:px-6 sm:py-6">
+    <header className="shrink-0 border-b border-stone-200/70 bg-white p-3">
       <div className="flex items-center justify-between">
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           <ProjectSwitcherMenu />

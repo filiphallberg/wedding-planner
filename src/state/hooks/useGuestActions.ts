@@ -3,7 +3,6 @@ import type { EventState } from '../types';
 import {
   addGuestToState,
   removeGuestFromState,
-  unseatGuestInState,
   updateGuestInState,
 } from '../utils/guestMutations';
 
@@ -29,12 +28,5 @@ export function useGuestActions(setState: Dispatch<SetStateAction<EventState>>) 
     [setState],
   );
 
-  const unseatGuest = useCallback(
-    (guestId: string) => {
-      setState((s) => unseatGuestInState(s, guestId));
-    },
-    [setState],
-  );
-
-  return { addGuest, updateGuest, removeGuest, unseatGuest };
+  return { addGuest, updateGuest, removeGuest };
 }

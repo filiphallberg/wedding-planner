@@ -5,15 +5,11 @@ import { applyEventDragEnd } from '../utils/applyEventDragEnd';
 
 export function useDragEndHandler(setState: Dispatch<SetStateAction<EventState>>) {
   return useCallback(
-    (event: DragEndEvent): string[] => {
-      let flashGuestIds: string[] = [];
+    (event: DragEndEvent) => {
       setState((prev) => {
-        const applied = applyEventDragEnd(prev, event);
-        if (!applied) return prev;
-        flashGuestIds = applied.flashGuestIds;
-        return applied.next;
+        const next = applyEventDragEnd(prev, event);
+        return next ?? prev;
       });
-      return flashGuestIds;
     },
     [setState],
   );

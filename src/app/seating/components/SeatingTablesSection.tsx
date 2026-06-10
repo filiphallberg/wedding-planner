@@ -11,9 +11,9 @@ export function SeatingTablesSection() {
       ref={mainScrollRef}
       className={cn('min-h-0 flex-1 overflow-y-auto overscroll-contain', 'p-3 sm:p-6')}
     >
-      <section className="space-y-7">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-baseline gap-3">
+      <section className="flex flex-col gap-2">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-baseline gap-2">
             <span className="font-display text-xs font-bold tracking-wider text-stone-600 uppercase">
               Tables
             </span>
@@ -44,7 +44,7 @@ export function SeatingTablesSection() {
             </div>
           </div>
         ) : (
-          <div className="grid grid-flow-row-dense grid-cols-1 gap-7 md:grid-cols-2 xl:grid-cols-3">
+          <div className="grid grid-flow-row-dense grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-3">
             {sortedTables.map((t) => (
               <div key={t.id} className={cn(t.shape === 'rectangle' && 'col-span-full')}>
                 <Table

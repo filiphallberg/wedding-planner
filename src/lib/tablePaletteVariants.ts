@@ -124,7 +124,7 @@ const paletteSlots = {
   }
 >;
 
-export const tableVariants = tv({
+const tableVariants = tv({
   slots: {
     base: 'border-8 border-white rounded-3xl transition-shadow duration-300',
     body: 'relative mx-auto w-full p-6 sm:p-8',
